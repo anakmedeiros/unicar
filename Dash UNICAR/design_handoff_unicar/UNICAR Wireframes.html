@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>UNICAR · Wireframes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Architects+Daughter&family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="wireframes.css"/>
+<style>
+  html, body { margin: 0; padding: 0; background: #f0eee9; font-family: Inter, sans-serif; }
+  body { color: #1a1a1a; }
+</style>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="components/primitives.jsx"></script>
+<script type="text/babel" src="components/logos.jsx"></script>
+<script type="text/babel" src="components/sidebar.jsx"></script>
+<script type="text/babel" src="components/dashboard.jsx"></script>
+<script type="text/babel" src="components/nova-os.jsx"></script>
+<script type="text/babel" src="components/screens.jsx"></script>
+<script type="text/babel" src="components/mobile.jsx"></script>
+
+<script type="text/babel" data-presets="react">
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "sidebarCollapsed": true,
+  "density": "compact",
+  "showAnnotations": true,
+  "hifiMode": true,
+  "dashVariant": "v3",
+  "novaOSVariant": "modal"
+}/*EDITMODE-END*/;
+
+function App() {
+  const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+
+  // root class controls notes + hi-fi
+  React.useEffect(() => {
+    const el = document.documentElement;
+    el.classList.toggle('no-notes', !t.showAnnotations);
+    el.classList.toggle('hifi', !!t.hifiMode);
+    el.classList.toggle('wireframey', !t.hifiMode);
+  }, [t.showAnnotations, t.hifiMode]);
+
+  const Dash = t.dashVariant === 'v2' ? DashboardV2 : t.dashVariant === 'v3' ? DashboardV3 : DashboardV1;
+  const NovaOS = t.novaOSVariant === 'page' ? NovaOSPage : t.novaOSVariant === 'wizard' ? NovaOSWizard : NovaOSModal;
+
+  const baseProps = {
+    collapsed: t.sidebarCollapsed,
+    density: t.density,
+  };
+
+  return (
+    <div className="wf">
+      <DesignCanvas>
+        <DCSection id="cover" title="UNICAR · Sistema de Gestão" subtitle="Wireframes hi-fi · paleta vermelho/preto/cinza quente · logo Velocímetro">
+          <DCArtboard id="logos" label="Conceitos de Logo (escolhido: C · Velocímetro)" width={1280} height={420}>
+            <div style={{padding: 0, height:'100%', overflow:'hidden', background:'#f4f2ed'}}>
+              <LogoExploration/>
+            </div>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="dashboard" title="Dashboard principal" subtitle="V3 · Kanban-first (status board)">
+          <DCArtboard id="dash-v3" label="Dashboard · Quadro de OS" width={1280} height={820}>
+            <DashboardV3 {...baseProps}/>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="nova-os" title="Nova Ordem de Serviço" subtitle="Modal sobre o dashboard">
+          <DCArtboard id="os-modal" label="Nova OS · Modal" width={1280} height={820}>
+            <NovaOSModal {...baseProps}/>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="cliente" title="Cadastro de Cliente" subtitle="Abas: dados pessoais · endereço · veículos · histórico">
+          <DCArtboard id="cliente-tab1" label="Dados Pessoais (aba ativa)" width={1280} height={820}>
+            <ClienteScreen {...baseProps}/>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="orcamento" title="Orçamento" subtitle="Documento imprimível · ações de imprimir, WhatsApp, aprovar">
+          <DCArtboard id="orcamento-doc" label="Visual documento" width={1280} height={820}>
+            <OrcamentoScreen {...baseProps}/>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="financeiro" title="Financeiro · Contas a Receber" subtitle="Filtros, resumos e indicadores de urgência">
+          <DCArtboard id="financeiro-rec" label="A Receber" width={1280} height={820}>
+            <FinanceiroScreen {...baseProps}/>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="pecas" title="Peças e Serviços" subtitle="Catálogo unificado com filtros e situação">
+          <DCArtboard id="pecas-list" label="Listagem com filtros" width={1280} height={820}>
+            <PecasScreen {...baseProps}/>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="mobile" title="Versões mobile" subtitle="Adaptação dos fluxos críticos para o celular do gerente / técnico em campo">
+          <DCArtboard id="mob-dash" label="Dashboard mobile" width={400} height={780}>
+            <div style={{padding: 20, display:'grid', placeItems:'center'}}>
+              <MobileDashboard/>
+            </div>
+          </DCArtboard>
+          <DCArtboard id="mob-novaos" label="Nova OS mobile (wizard)" width={400} height={780}>
+            <div style={{padding: 20, display:'grid', placeItems:'center'}}>
+              <MobileNovaOS/>
+            </div>
+          </DCArtboard>
+          <DCArtboard id="mob-fin" label="Financeiro mobile" width={400} height={780}>
+            <div style={{padding: 20, display:'grid', placeItems:'center'}}>
+              <MobileFinanceiro/>
+            </div>
+          </DCArtboard>
+        </DCSection>
+      </DesignCanvas>
+
+      {/* Tweaks */}
+      <TweaksPanel>
+        <TweakSection label="Apresentação"/>
+        <TweakToggle  label="Mostrar anotações"
+                     value={t.showAnnotations}
+                     onChange={(v)=>setTweak('showAnnotations', v)}/>
+        <TweakRadio   label="Modo"
+                     value={t.hifiMode ? 'hifi' : 'wireframe'}
+                     options={['wireframe','hifi']}
+                     onChange={(v)=>setTweak('hifiMode', v === 'hifi')}/>
+
+        <TweakSection label="Layout global"/>
+        <TweakToggle  label="Sidebar recolhida"
+                     value={t.sidebarCollapsed}
+                     onChange={(v)=>setTweak('sidebarCollapsed', v)}/>
+        <TweakRadio   label="Densidade"
+                     value={t.density}
+                     options={['compact','regular','comfy']}
+                     onChange={(v)=>setTweak('density', v)}/>
+      </TweaksPanel>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
