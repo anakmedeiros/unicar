@@ -206,17 +206,28 @@ export const ordensServicoService = {
       }).select('id').single()
       if (pErr) throw pErr
 
-      if (pag && os.parcelas && os.parcelas.length > 0) {
-        const { error: paErr } = await supabase.from('os_parcelas').insert(
-          os.parcelas.map(p => ({
-            os_id: osId,
-            pagamento_id: pag.id,
-            numero:          p.numero,
-            data_vencimento: p.data_vencimento,
-            valor:           p.valor,
-            status:          p.status,
-          }))
-        )
+      if (pag) {
+        const parcelasToInsert =
+          os.parcelas && os.parcelas.length > 0
+            ? os.parcelas.map(p => ({
+                os_id: osId,
+                pagamento_id: pag.id,
+                numero:          p.numero,
+                data_vencimento: p.data_vencimento,
+                valor:           p.valor,
+                status:          p.status,
+              }))
+            // pagamento à vista: cria uma parcela única automaticamente
+            : [{
+                os_id: osId,
+                pagamento_id: pag.id,
+                numero: 1,
+                data_vencimento: os.pagamento_data_vencimento || new Date().toISOString().slice(0, 10),
+                valor: os.pagamento_total ?? 0,
+                status: 'pendente',
+              }]
+
+        const { error: paErr } = await supabase.from('os_parcelas').insert(parcelasToInsert)
         if (paErr) throw paErr
       }
     }
