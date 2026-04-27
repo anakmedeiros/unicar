@@ -29,7 +29,7 @@ type NavEntry = NavLink | NavGroup
 const NAV: NavEntry[] = [
   { id: 'dashboard', label: 'Dashboard',         icon: 'dashboard', section: null,       path: '/' },
   { id: 'os',        label: 'Ordens de Serviço', icon: 'wrench',    section: 'OPERAÇÃO', path: '/os' },
-  { id: 'agenda',    label: 'Agenda',             icon: 'calendar',  section: null,       path: '/agenda' },
+  { id: 'agendamentos', label: 'Agendamentos', icon: 'calendar', section: null, path: '/agendamentos' },
   { id: 'clientes',  label: 'Clientes',           icon: 'users',     section: 'CADASTROS',path: '/clientes' },
   { id: 'pecas',     label: 'Peças e Serviços',   icon: 'box',       section: null,       path: '/pecas' },
   {

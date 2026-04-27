@@ -7,6 +7,7 @@ import { OrdensServicoPage } from './pages/OrdensServico'
 import { PecasServicosPage } from './pages/PecasServicos'
 import { ContasReceberPage } from './pages/ContasReceber'
 import { PlaceholderPage } from './pages/Placeholder'
+import { AgendamentosPage } from './pages/Agendamentos'
 
 export default function App() {
   return (
@@ -16,7 +17,7 @@ export default function App() {
           <Route index element={<Dashboard />} />
           <Route path="/os"            element={<OrdensServicoPage />} />
           <Route path="/orcamentos"    element={<PlaceholderPage title="Orçamentos" />} />
-          <Route path="/agenda"        element={<PlaceholderPage title="Agenda" />} />
+          <Route path="/agendamentos"   element={<AgendamentosPage />} />
           <Route path="/clientes"      element={<ClientesPage />} />
           <Route path="/veiculos"      element={<PlaceholderPage title="Veículos" />} />
           <Route path="/pecas"         element={<PecasServicosPage />} />

@@ -20,6 +20,7 @@ export type OrdemServicoStatus =
   | 'em_execucao'
   | 'aguardando_peca'
   | 'pronta'
+  | 'veiculo_liberado'
   | 'entregue'
   | 'cancelada'
 

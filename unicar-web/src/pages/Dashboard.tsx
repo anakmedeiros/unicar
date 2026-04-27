@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   DndContext,
@@ -276,6 +277,13 @@ function KanbanColumn({ col, cards }: { col: ColDef; cards: KanbanOS[] }) {
   )
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function formatCompact(v: number): string {
+  if (v >= 1000) return `R$ ${(v / 1000).toFixed(1)}k`
+  return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+
 // ─── Metric card "Em breve" ────────────────────────────────────────────────────
 
 function MetricEmBreve({ label }: { label: string }) {
@@ -311,10 +319,23 @@ function MetricEmBreve({ label }: { label: string }) {
 
 export function Dashboard() {
   const qc = useQueryClient()
+  const navigate = useNavigate()
 
   const { data: queryData = [] } = useQuery({
     queryKey: ['kanban'],
     queryFn: ordensServicoService.listKanban,
+  })
+
+  const { data: parcelasReceber = [] } = useQuery({
+    queryKey: ['resumo-receber'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('os_parcelas')
+        .select('valor, data_vencimento, status')
+        .in('status', ['pendente', 'atrasado'])
+      if (error) throw error
+      return (data ?? []) as { valor: number; data_vencimento: string; status: string }[]
+    },
   })
 
   // Local state for optimistic DnD updates
@@ -358,7 +379,7 @@ export function Dashboard() {
 
   // Computed: kanban-visible OS with filters applied
   const kanbanOS = useMemo(() => {
-    let list = localOS.filter(o => o.status !== 'rascunho')
+    let list = localOS.filter(o => o.status !== 'rascunho' && o.status !== 'veiculo_liberado')
     if (filterToday) {
       const todayStr = new Date().toISOString().slice(0, 10)
       list = list.filter(o => o.data.startsWith(todayStr))
@@ -400,6 +421,15 @@ export function Dashboard() {
     () => localOS.filter(o => o.status === 'pronta').length,
     [localOS]
   )
+
+  const totalReceber = useMemo(
+    () => parcelasReceber.reduce((s, p) => s + (p.valor ?? 0), 0),
+    [parcelasReceber]
+  )
+  const emAtraso = useMemo(() => {
+    const hoje = new Date().toISOString().slice(0, 10)
+    return parcelasReceber.filter(p => p.status === 'atrasado' || p.data_vencimento < hoje).length
+  }, [parcelasReceber])
 
   // Unique technicians for filter dropdown
   const uniqueTecnicos = useMemo(() => {
@@ -557,7 +587,49 @@ export function Dashboard() {
             </div>
           </div>
 
-          <MetricEmBreve label="A Receber" />
+          {/* A Receber */}
+          <div
+            onClick={() => navigate('/financeiro/contas-a-receber')}
+            style={{
+              background: '#fff',
+              border: '1px solid #E3E0D9',
+              borderRadius: 6,
+              padding: 16,
+              boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+              cursor: 'pointer',
+              transition: 'border-color 0.15s',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.borderColor = '#E31E2D')}
+            onMouseLeave={e => (e.currentTarget.style.borderColor = '#E3E0D9')}
+          >
+            <div
+              style={{
+                fontSize: 10.5,
+                fontWeight: 600,
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+                color: '#8A8A8A',
+              }}
+            >
+              A RECEBER
+            </div>
+            <div
+              style={{
+                fontSize: 26,
+                fontWeight: 800,
+                letterSpacing: '-0.02em',
+                marginTop: 6,
+                fontVariantNumeric: 'tabular-nums',
+                color: '#1A1A1A',
+              }}
+            >
+              {formatCompact(totalReceber)}
+            </div>
+            <div style={{ fontSize: 11, color: emAtraso > 0 ? '#DC2626' : '#8A8A8A', marginTop: 4 }}>
+              {parcelasReceber.length} {parcelasReceber.length === 1 ? 'parcela' : 'parcelas'}
+              {emAtraso > 0 ? ` · ${emAtraso} em atraso` : ''}
+            </div>
+          </div>
         </div>
 
         {/* Kanban board */}

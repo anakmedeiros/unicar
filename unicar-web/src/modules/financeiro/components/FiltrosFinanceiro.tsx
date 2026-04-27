@@ -1,14 +1,18 @@
+import { useMemo } from 'react'
 import { ResumoLancamentos } from './ResumoLancamentos'
+import { CalendarioVencimentos } from './CalendarioVencimentos'
 import type { StatusPagamento, Parcela } from '../types'
 import { formatCurrency, STATUS_PAG_STYLE } from '../types'
 
 interface FiltrosFinanceiroProps {
-  dataInicio: string
-  dataFim: string
+  allParcelas: Parcela[]
+  rangeStart: string | null
+  rangeEnd: string | null
+  calAno: number
+  calMes: number
   statusFiltros: Set<StatusPagamento>
-  parcelas: Parcela[]
-  onDataInicioChange: (v: string) => void
-  onDataFimChange: (v: string) => void
+  onRangeChange: (start: string | null, end: string | null) => void
+  onMonthChange: (ano: number, mes: number) => void
   onStatusToggle: (s: StatusPagamento) => void
 }
 
@@ -19,18 +23,36 @@ const STATUS_OPTIONS: { key: StatusPagamento; label: string }[] = [
 ]
 
 export function FiltrosFinanceiro({
-  dataInicio,
-  dataFim,
+  allParcelas,
+  rangeStart,
+  rangeEnd,
+  calAno,
+  calMes,
   statusFiltros,
-  parcelas,
-  onDataInicioChange,
-  onDataFimChange,
+  onRangeChange,
+  onMonthChange,
   onStatusToggle,
 }: FiltrosFinanceiroProps) {
-  const recebido = parcelas.filter(p => p.statusEfetivo === 'pago').reduce((s, p) => s + p.valor, 0)
-  const pendente = parcelas.filter(p => p.statusEfetivo === 'pendente').reduce((s, p) => s + p.valor, 0)
-  const atrasado = parcelas.filter(p => p.statusEfetivo === 'atrasado').reduce((s, p) => s + p.valor, 0)
-  const total = parcelas.reduce((s, p) => s + p.valor, 0)
+  // Parcelas visible in the calendar month (for dots)
+  const calMonthParcelas = useMemo(() => {
+    const monthStr = `${calAno}-${String(calMes).padStart(2, '0')}`
+    return allParcelas.filter(p => p.data_vencimento.startsWith(monthStr))
+  }, [allParcelas, calAno, calMes])
+
+  // Parcelas within the selected range (for status counts and resumo)
+  const periodParcelas = useMemo(() => {
+    if (rangeStart && rangeEnd)
+      return allParcelas.filter(p => p.data_vencimento >= rangeStart && p.data_vencimento <= rangeEnd)
+    if (rangeStart)
+      return allParcelas.filter(p => p.data_vencimento === rangeStart)
+    const monthStr = `${calAno}-${String(calMes).padStart(2, '0')}`
+    return allParcelas.filter(p => p.data_vencimento.startsWith(monthStr))
+  }, [allParcelas, rangeStart, rangeEnd, calAno, calMes])
+
+  const recebido = periodParcelas.filter(p => p.statusEfetivo === 'pago').reduce((s, p) => s + p.valor, 0)
+  const pendente = periodParcelas.filter(p => p.statusEfetivo === 'pendente').reduce((s, p) => s + p.valor, 0)
+  const atrasado = periodParcelas.filter(p => p.statusEfetivo === 'atrasado').reduce((s, p) => s + p.valor, 0)
+  const total = periodParcelas.reduce((s, p) => s + p.valor, 0)
 
   return (
     <div
@@ -42,50 +64,16 @@ export function FiltrosFinanceiro({
         gap: 12,
       }}
     >
-      {/* Período */}
-      <div
-        style={{
-          background: '#fff',
-          border: '1px solid #E3E0D9',
-          borderRadius: 6,
-          padding: 12,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 10,
-        }}
-      >
-        <span
-          style={{
-            fontSize: 10.5,
-            fontWeight: 600,
-            letterSpacing: '0.08em',
-            textTransform: 'uppercase',
-            color: '#8A8A8A',
-          }}
-        >
-          Período
-        </span>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <label style={{ fontSize: 11, color: '#6A6864' }}>Data início</label>
-          <input
-            type="date"
-            value={dataInicio}
-            onChange={e => onDataInicioChange(e.target.value)}
-            style={dateInputStyle}
-          />
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <label style={{ fontSize: 11, color: '#6A6864' }}>Data fim</label>
-          <input
-            type="date"
-            value={dataFim}
-            onChange={e => onDataFimChange(e.target.value)}
-            style={dateInputStyle}
-          />
-        </div>
-      </div>
+      {/* Calendar */}
+      <CalendarioVencimentos
+        calAno={calAno}
+        calMes={calMes}
+        parcelas={calMonthParcelas}
+        rangeStart={rangeStart}
+        rangeEnd={rangeEnd}
+        onRangeChange={onRangeChange}
+        onMonthChange={onMonthChange}
+      />
 
       {/* Status */}
       <div
@@ -113,8 +101,8 @@ export function FiltrosFinanceiro({
 
         {STATUS_OPTIONS.map(opt => {
           const style = STATUS_PAG_STYLE[opt.key]
-          const count = parcelas.filter(p => p.statusEfetivo === opt.key).length
-          const sum = parcelas.filter(p => p.statusEfetivo === opt.key).reduce((s, p) => s + p.valor, 0)
+          const count = periodParcelas.filter(p => p.statusEfetivo === opt.key).length
+          const sum = periodParcelas.filter(p => p.statusEfetivo === opt.key).reduce((s, p) => s + p.valor, 0)
           const checked = statusFiltros.has(opt.key)
 
           return (
@@ -170,18 +158,4 @@ export function FiltrosFinanceiro({
       />
     </div>
   )
-}
-
-const dateInputStyle: React.CSSProperties = {
-  width: '100%',
-  height: 32,
-  padding: '0 8px',
-  border: '1px solid #CFCCC6',
-  borderRadius: 5,
-  fontSize: 12,
-  color: '#1A1A1A',
-  background: '#fff',
-  outline: 'none',
-  fontFamily: 'inherit',
-  boxSizing: 'border-box',
 }

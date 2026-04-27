@@ -32,6 +32,7 @@ const STATUS_LABEL: Record<OrdemServicoStatus, string> = {
   em_execucao:         'Em execução',
   aguardando_peca:     'Aguardando peça',
   pronta:              'Pronta',
+  veiculo_liberado:    'Veículo Liberado',
   entregue:            'Entregue',
   cancelada:           'Cancelada',
 }
@@ -43,6 +44,7 @@ const STATUS_COLOR: Record<OrdemServicoStatus, { bg: string; color: string }> = 
   em_execucao:         { bg: 'rgba(37,99,235,0.12)',   color: '#1D4ED8' },
   aguardando_peca:     { bg: 'rgba(124,58,237,0.12)',  color: '#6D28D9' },
   pronta:              { bg: 'rgba(22,163,74,0.12)',   color: '#15803D' },
+  veiculo_liberado:    { bg: '#d1fae5',                color: '#065f46' },
   entregue:            { bg: 'rgba(22,101,52,0.12)',   color: '#14532D' },
   cancelada:           { bg: 'rgba(220,38,38,0.12)',   color: '#B91C1C' },
 }
@@ -1246,6 +1248,10 @@ export function OrdensServicoPage() {
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({})
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const [toasts, setToasts] = useState<ToastItem[]>([])
+  const [rowMenu, setRowMenu] = useState<string | null>(null)
+  const [rowMenuPos, setRowMenuPos] = useState<{ top: number; right: number } | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<OrdemServicoRow | null>(null)
+  const [liberarTarget, setLiberarTarget] = useState<OrdemServicoRow | null>(null)
 
   const formRef = useRef(form)
   useEffect(() => { formRef.current = form })
@@ -1301,6 +1307,66 @@ export function OrdensServicoPage() {
         setModalMode('edit')
         setForm(prev => ({ ...prev, numero: saved.numero }))
       }
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: ordensServicoService.delete,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['ordens-servico'] })
+      qc.invalidateQueries({ queryKey: ['kanban'] })
+      setDeleteTarget(null)
+      showToast('OS excluída com sucesso')
+    },
+    onError: (err) => {
+      setDeleteTarget(null)
+      const msg = (err as { message?: string })?.message ?? 'Erro desconhecido'
+      showToast(`Erro ao excluir OS: ${msg}`, 'error')
+    },
+  })
+
+  useEffect(() => {
+    function handleOutside(e: MouseEvent) {
+      const target = e.target as HTMLElement
+      if (!target.closest('[data-row-actions]')) { setRowMenu(null); setRowMenuPos(null) }
+    }
+    document.addEventListener('mousedown', handleOutside)
+    return () => document.removeEventListener('mousedown', handleOutside)
+  }, [])
+
+  function handleDeleteClick(r: OrdemServicoRow) {
+    setRowMenu(null)
+    if (r.status === 'entregue') {
+      showToast('OS entregue não pode ser excluída', 'error')
+      return
+    }
+    setDeleteTarget(r)
+  }
+
+  async function handleDeleteConfirm() {
+    if (!deleteTarget) return
+    deleteMutation.mutate(deleteTarget.id)
+  }
+
+  const liberarMutation = useMutation({
+    mutationFn: async (row: OrdemServicoRow) => {
+      const { error } = await import('../lib/supabase').then(m =>
+        m.supabase.from('ordens_servico').update({ status: 'veiculo_liberado' }).eq('id', row.id)
+      )
+      if (error) throw error
+      try {
+        await ordensServicoService.inserirHistorico(row.id, 'pronta', 'veiculo_liberado')
+      } catch { /* silent */ }
+    },
+    onSuccess: (_data, row) => {
+      qc.invalidateQueries({ queryKey: ['ordens-servico'] })
+      qc.invalidateQueries({ queryKey: ['kanban'] })
+      setLiberarTarget(null)
+      showToast(`Veículo liberado — OS #${row.numero}`)
+    },
+    onError: () => {
+      setLiberarTarget(null)
+      showToast('Erro ao liberar veículo', 'error')
     },
   })
 
@@ -1650,10 +1716,6 @@ export function OrdensServicoPage() {
               </button>
             )}
           </div>
-          <Button variant="secondary" size="sm">
-            <Icon name="download" size={12} />
-            Exportar
-          </Button>
         </div>
 
         {/* Table */}
@@ -1755,11 +1817,94 @@ export function OrdensServicoPage() {
                     </span>
                   </td>
 
-                  {/* Arrow */}
-                  <td style={{ padding: '11px 14px', borderBottom: '1px solid #EBE8E2', color: '#CFCCC6' }}>
-                    <Icon name="chevron" size={14} />
+                  {/* Actions */}
+                  <td
+                    style={{ padding: '6px 14px', borderBottom: '1px solid #EBE8E2' }}
+                    onClick={e => e.stopPropagation()}
+                    data-row-actions
+                  >
+                    <div data-row-actions>
+                      <button
+                        data-row-actions
+                        onClick={e => {
+                          e.stopPropagation()
+                          if (rowMenu === r.id) { setRowMenu(null); setRowMenuPos(null); return }
+                          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+                          const menuHeight = 120
+                          const spaceBelow = window.innerHeight - rect.bottom
+                          const top = spaceBelow < menuHeight ? rect.top - menuHeight - 4 : rect.bottom + 4
+                          setRowMenuPos({ top, right: window.innerWidth - rect.right })
+                          setRowMenu(r.id)
+                        }}
+                        style={{
+                          background: 'none', border: 'none', cursor: 'pointer',
+                          padding: '4px 6px', borderRadius: 4, color: '#8A8A8A',
+                          fontSize: 14, lineHeight: 1, fontWeight: 700,
+                        }}
+                        title="Ações"
+                      >
+                        ···
+                      </button>
+                      {rowMenu === r.id && rowMenuPos && (
+                        <div
+                          data-row-actions
+                          style={{
+                            position: 'fixed',
+                            top: rowMenuPos.top,
+                            right: rowMenuPos.right,
+                            zIndex: 1000,
+                            background: '#fff', border: '1px solid #EBE8E2',
+                            borderRadius: 6, boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+                            minWidth: 160,
+                          }}
+                        >
+                          <button
+                            data-row-actions
+                            onClick={() => { setRowMenu(null); openEdit(r) }}
+                            style={{
+                              display: 'block', width: '100%', textAlign: 'left',
+                              padding: '8px 14px', fontSize: 12.5, background: 'none',
+                              border: 'none', cursor: 'pointer', color: '#1A1A1A',
+                            }}
+                            onMouseEnter={e => (e.currentTarget.style.background = '#F4F2ED')}
+                            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                          >
+                            Editar
+                          </button>
+                          {r.status === 'pronta' && (
+                            <button
+                              data-row-actions
+                              onClick={() => { setRowMenu(null); setLiberarTarget(r) }}
+                              style={{
+                                display: 'block', width: '100%', textAlign: 'left',
+                                padding: '8px 14px', fontSize: 12.5, background: 'none',
+                                border: 'none', cursor: 'pointer', color: '#065f46',
+                              }}
+                              onMouseEnter={e => (e.currentTarget.style.background = '#d1fae5')}
+                              onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                            >
+                              Liberar Veículo
+                            </button>
+                          )}
+                          <button
+                            data-row-actions
+                            onClick={() => handleDeleteClick(r)}
+                            style={{
+                              display: 'block', width: '100%', textAlign: 'left',
+                              padding: '8px 14px', fontSize: 12.5, background: 'none',
+                              border: 'none', cursor: 'pointer', color: '#DC2626',
+                            }}
+                            onMouseEnter={e => (e.currentTarget.style.background = '#FEF2F2')}
+                            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                          >
+                            Excluir
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </td>
                 </tr>
+
               ))}
             </tbody>
           </table>
@@ -1784,6 +1929,101 @@ export function OrdensServicoPage() {
         onGerarOrcamento={handleGerarOrcamento}
         onIniciarOS={handleIniciarOS}
       />
+
+      {/* Liberar Veículo confirmation modal */}
+      {liberarTarget && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)',
+            zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+          }}
+          onClick={e => { if (e.target === e.currentTarget) setLiberarTarget(null) }}
+        >
+          <div
+            style={{
+              background: '#fff', borderRadius: 8, width: 400, maxWidth: '100%',
+              boxShadow: '0 16px 48px rgba(0,0,0,0.22)', padding: '24px 24px 20px',
+            }}
+          >
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#1A1A1A', marginBottom: 10 }}>
+              Liberar Veículo
+            </div>
+            <div style={{ fontSize: 13, color: '#4A4A4A', lineHeight: 1.5, marginBottom: 24 }}>
+              Confirmar liberação do veículo para <strong>{liberarTarget.clienteNome}</strong>
+              {liberarTarget.veiculoPlaca && (
+                <> — <span style={{ fontFamily: "'JetBrains Mono', monospace" }}>{displayPlate(liberarTarget.veiculoPlaca)}</span></>
+              )}?
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setLiberarTarget(null)}
+                disabled={liberarMutation.isPending}
+              >
+                Cancelar
+              </Button>
+              <button
+                onClick={() => liberarMutation.mutate(liberarTarget)}
+                disabled={liberarMutation.isPending}
+                style={{
+                  padding: '6px 16px', borderRadius: 5, border: 'none', cursor: 'pointer',
+                  background: '#065f46', color: '#fff', fontSize: 12.5, fontWeight: 600,
+                  fontFamily: 'inherit', opacity: liberarMutation.isPending ? 0.6 : 1,
+                }}
+              >
+                {liberarMutation.isPending ? 'Liberando...' : 'Confirmar liberação'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirmation modal */}
+      {deleteTarget && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)',
+            zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+          }}
+          onClick={e => { if (e.target === e.currentTarget) setDeleteTarget(null) }}
+        >
+          <div
+            style={{
+              background: '#fff', borderRadius: 8, width: 400, maxWidth: '100%',
+              boxShadow: '0 16px 48px rgba(0,0,0,0.22)', padding: '24px 24px 20px',
+            }}
+          >
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#1A1A1A', marginBottom: 10 }}>
+              Excluir OS
+            </div>
+            <div style={{ fontSize: 13, color: '#4A4A4A', lineHeight: 1.5, marginBottom: 24 }}>
+              Tem certeza que deseja excluir a OS <strong style={{ fontFamily: "'JetBrains Mono', monospace" }}>#{deleteTarget.numero}</strong>? Esta ação não pode ser desfeita.
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setDeleteTarget(null)}
+                disabled={deleteMutation.isPending}
+              >
+                Cancelar
+              </Button>
+              <button
+                onClick={handleDeleteConfirm}
+                disabled={deleteMutation.isPending}
+                style={{
+                  padding: '6px 16px', borderRadius: 5, border: 'none', cursor: 'pointer',
+                  background: '#DC2626', color: '#fff', fontSize: 12.5, fontWeight: 600,
+                  fontFamily: 'inherit', opacity: deleteMutation.isPending ? 0.6 : 1,
+                }}
+              >
+                {deleteMutation.isPending ? 'Excluindo...' : 'Excluir'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Toast container */}
       <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 9999, display: 'flex', flexDirection: 'column', gap: 8 }}>

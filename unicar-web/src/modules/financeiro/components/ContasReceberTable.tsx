@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Button } from '../../../components/ui/Button'
 import { Icon } from '../../../components/ui/Icon'
 import {
@@ -20,6 +20,7 @@ interface ContasReceberTableProps {
   onDeselectAll: () => void
   onMarcarRecebido: (ids: string[]) => void
   onRecebimentoParcial: (parcela: Parcela) => void
+  onDesfazerRecebimento: (id: string) => void
 }
 
 export function ContasReceberTable({
@@ -31,6 +32,7 @@ export function ContasReceberTable({
   onDeselectAll,
   onMarcarRecebido,
   onRecebimentoParcial,
+  onDesfazerRecebimento,
 }: ContasReceberTableProps) {
   const [acoesBulkOpen, setAcoesBulkOpen] = useState(false)
   const [rowDropdown, setRowDropdown] = useState<string | null>(null)
@@ -141,10 +143,6 @@ export function ContasReceberTable({
                   setAcoesBulkOpen(false)
                 }}
               />
-              <DropItem
-                label="Exportar CSV"
-                onClick={() => { exportCSV(); setAcoesBulkOpen(false) }}
-              />
             </div>
           )}
         </div>
@@ -188,6 +186,7 @@ export function ContasReceberTable({
                   onCloseDropdown={() => setRowDropdown(null)}
                   onMarcarRecebido={() => { onMarcarRecebido([p.id]); setRowDropdown(null) }}
                   onRecebimentoParcial={() => { onRecebimentoParcial(p); setRowDropdown(null) }}
+                  onDesfazerRecebimento={() => { onDesfazerRecebimento(p.id); setRowDropdown(null) }}
                 />
               ))}
             </tbody>
@@ -209,6 +208,7 @@ function TableRow({
   onCloseDropdown,
   onMarcarRecebido,
   onRecebimentoParcial,
+  onDesfazerRecebimento,
 }: {
   parcela: Parcela
   selected: boolean
@@ -218,22 +218,27 @@ function TableRow({
   onCloseDropdown: () => void
   onMarcarRecebido: () => void
   onRecebimentoParcial: () => void
+  onDesfazerRecebimento: () => void
 }) {
   const rowRef = useRef<HTMLTableRowElement>(null)
+  const dropRef = useRef<HTMLDivElement>(null)
+  const [dropPos, setDropPos] = useState<{ top: number; right: number } | null>(null)
   const pagStyle = STATUS_PAG_STYLE[p.statusEfetivo]
   const osStyle = OS_STATUS_COLOR[p.os_status] ?? { bg: 'rgba(138,138,138,0.1)', color: '#6A6864' }
   const isLate = p.statusEfetivo === 'atrasado'
 
+  const close = useCallback(() => { setDropPos(null); onCloseDropdown() }, [onCloseDropdown])
+
   useEffect(() => {
     if (!isRowOpen) return
     function handle(e: MouseEvent) {
-      if (rowRef.current && !rowRef.current.contains(e.target as Node)) {
-        onCloseDropdown()
-      }
+      const inRow = rowRef.current?.contains(e.target as Node)
+      const inDrop = dropRef.current?.contains(e.target as Node)
+      if (!inRow && !inDrop) close()
     }
     document.addEventListener('mousedown', handle)
     return () => document.removeEventListener('mousedown', handle)
-  }, [isRowOpen, onCloseDropdown])
+  }, [isRowOpen, close])
 
   return (
     <tr
@@ -317,36 +322,35 @@ function TableRow({
         </span>
       </td>
 
-      <td style={{ ...tdStyle, position: 'relative' }}>
+      <td style={tdStyle}>
         <button
-          onClick={onOpenDropdown}
+          onClick={e => {
+            if (isRowOpen) { close(); return }
+            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+            const menuH = 90
+            const top = window.innerHeight - rect.bottom < menuH ? rect.top - menuH - 4 : rect.bottom + 4
+            setDropPos({ top, right: window.innerWidth - rect.right })
+            onOpenDropdown()
+          }}
           style={{
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            padding: '4px 6px',
-            borderRadius: 4,
-            color: '#8A8A8A',
-            display: 'grid',
-            placeItems: 'center',
-            fontFamily: 'inherit',
+            background: 'none', border: 'none', cursor: 'pointer',
+            padding: '4px 6px', borderRadius: 4, color: '#8A8A8A',
+            display: 'grid', placeItems: 'center', fontFamily: 'inherit',
           }}
         >
           <Icon name="dots" size={14} />
         </button>
 
-        {isRowOpen && (
-          <div style={{ ...dropdownStyle, right: 0, left: 'auto', top: '100%' }}>
+        {isRowOpen && dropPos && (
+          <div ref={dropRef} style={{ ...dropdownStyle, position: 'fixed', top: dropPos.top, right: dropPos.right, left: 'auto' }}>
             {p.statusEfetivo !== 'pago' && (
               <>
-                <DropItem label="Marcar como recebido" onClick={onMarcarRecebido} />
-                <DropItem label="Receber parcial" onClick={onRecebimentoParcial} />
+                <DropItem label="Marcar como recebido" onClick={() => { onMarcarRecebido(); close() }} />
+                <DropItem label="Receber parcial" onClick={() => { onRecebimentoParcial(); close() }} />
               </>
             )}
             {p.statusEfetivo === 'pago' && (
-              <div style={{ padding: '8px 12px', fontSize: 11.5, color: '#8A8A8A', fontStyle: 'italic' }}>
-                Já recebido
-              </div>
+              <DropItem label="Desfazer recebimento" onClick={() => { onDesfazerRecebimento(); close() }} />
             )}
           </div>
         )}

@@ -3,34 +3,29 @@ import { Topbar } from '../components/layout/Topbar'
 import { ToastNotification } from '../shared/components/Toast'
 import type { ToastItem } from '../shared/components/Toast'
 import { FiltrosFinanceiro } from '../modules/financeiro/components/FiltrosFinanceiro'
-import { CalendarioVencimentos } from '../modules/financeiro/components/CalendarioVencimentos'
 import { ContasReceberTable } from '../modules/financeiro/components/ContasReceberTable'
 import { ModalRecebimentoParcial } from '../modules/financeiro/components/ModalRecebimentoParcial'
 import {
   useContasReceber,
   useMarcarRecebido,
   useRecebimentoParcial,
+  useDesfazerRecebimento,
 } from '../modules/financeiro/hooks/useContasReceber'
 import type { StatusPagamento, Parcela } from '../modules/financeiro/types'
 
-function firstDayOfMonth(): string {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
-}
-
-function lastDayOfMonth(): string {
-  const d = new Date()
-  return new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().slice(0, 10)
-}
-
 export function ContasReceberPage() {
-  // Filters
-  const [dataInicio, setDataInicio] = useState(firstDayOfMonth)
-  const [dataFim, setDataFim] = useState(lastDayOfMonth)
+  // Calendar month navigation
+  const [calAno, setCalAno] = useState(() => new Date().getFullYear())
+  const [calMes, setCalMes] = useState(() => new Date().getMonth() + 1)
+
+  // Date range filter
+  const [rangeStart, setRangeStart] = useState<string | null>(null)
+  const [rangeEnd, setRangeEnd] = useState<string | null>(null)
+
+  // Status filter
   const [statusFiltros, setStatusFiltros] = useState<Set<StatusPagamento>>(
     new Set(['pago', 'pendente', 'atrasado'])
   )
-  const [diaSelecionado, setDiaSelecionado] = useState<string | null>(null)
 
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -58,25 +53,40 @@ export function ContasReceberPage() {
 
   const marcarMutation = useMarcarRecebido()
   const parcialMutation = useRecebimentoParcial()
+  const desfazerMutation = useDesfazerRecebimento()
 
-  // Compute periodo parcelas (for filters panel and calendar dots)
-  const periodParcelas = useMemo(
-    () => allParcelas.filter(p => p.data_vencimento >= dataInicio && p.data_vencimento <= dataFim),
-    [allParcelas, dataInicio, dataFim]
+  // Period parcelas: range if set, else full displayed month
+  const periodParcelas = useMemo(() => {
+    if (rangeStart && rangeEnd)
+      return allParcelas.filter(p => p.data_vencimento >= rangeStart && p.data_vencimento <= rangeEnd)
+    if (rangeStart)
+      return allParcelas.filter(p => p.data_vencimento === rangeStart)
+    const monthStr = `${calAno}-${String(calMes).padStart(2, '0')}`
+    return allParcelas.filter(p => p.data_vencimento.startsWith(monthStr))
+  }, [allParcelas, rangeStart, rangeEnd, calAno, calMes])
+
+  // Table data: period filtered by status
+  const filteredParcelas = useMemo(
+    () => periodParcelas.filter(p => statusFiltros.has(p.statusEfetivo)),
+    [periodParcelas, statusFiltros]
   )
 
-  // Final filtered parcelas for the table
-  const filteredParcelas = useMemo(() => {
-    let list = periodParcelas.filter(p => statusFiltros.has(p.statusEfetivo))
-    if (diaSelecionado) list = list.filter(p => p.data_vencimento === diaSelecionado)
-    return list
-  }, [periodParcelas, statusFiltros, diaSelecionado])
-
-  // Calendar month derived from dataInicio
-  const calAno = parseInt(dataInicio.slice(0, 4))
-  const calMes = parseInt(dataInicio.slice(5, 7))
-
   // Handlers
+  function handleRangeChange(start: string | null, end: string | null) {
+    setRangeStart(start)
+    setRangeEnd(end)
+    setSelectedIds(new Set())
+  }
+
+  function handleMonthChange(ano: number, mes: number) {
+    setCalAno(ano)
+    setCalMes(mes)
+    // Clear range when navigating to a different month
+    setRangeStart(null)
+    setRangeEnd(null)
+    setSelectedIds(new Set())
+  }
+
   function handleStatusToggle(s: StatusPagamento) {
     setStatusFiltros(prev => {
       const next = new Set(prev)
@@ -111,6 +121,15 @@ export function ContasReceberPage() {
     }
   }
 
+  async function handleDesfazerRecebimento(id: string) {
+    try {
+      await desfazerMutation.mutateAsync(id)
+      showToast('Recebimento desfeito')
+    } catch {
+      showToast('Erro ao desfazer recebimento', 'error')
+    }
+  }
+
   async function handleRecebimentoParcial(params: Parameters<typeof parcialMutation.mutateAsync>[0]) {
     try {
       await parcialMutation.mutateAsync(params)
@@ -134,18 +153,20 @@ export function ContasReceberPage() {
           gap: 12,
         }}
       >
-        {/* Left panel: Filters */}
+        {/* Left panel: Calendar + Filters */}
         <FiltrosFinanceiro
-          dataInicio={dataInicio}
-          dataFim={dataFim}
+          allParcelas={allParcelas}
+          rangeStart={rangeStart}
+          rangeEnd={rangeEnd}
+          calAno={calAno}
+          calMes={calMes}
           statusFiltros={statusFiltros}
-          parcelas={periodParcelas}
-          onDataInicioChange={setDataInicio}
-          onDataFimChange={setDataFim}
+          onRangeChange={handleRangeChange}
+          onMonthChange={handleMonthChange}
           onStatusToggle={handleStatusToggle}
         />
 
-        {/* Right panel: Calendar + Table */}
+        {/* Right panel: Table */}
         <div
           style={{
             flex: 1,
@@ -156,14 +177,6 @@ export function ContasReceberPage() {
             minWidth: 0,
           }}
         >
-          <CalendarioVencimentos
-            ano={calAno}
-            mes={calMes}
-            parcelas={periodParcelas}
-            diaSelecionado={diaSelecionado}
-            onDiaClick={setDiaSelecionado}
-          />
-
           <ContasReceberTable
             parcelas={filteredParcelas}
             selectedIds={selectedIds}
@@ -173,6 +186,7 @@ export function ContasReceberPage() {
             onDeselectAll={handleDeselectAll}
             onMarcarRecebido={handleMarcarRecebido}
             onRecebimentoParcial={setModalParcela}
+            onDesfazerRecebimento={handleDesfazerRecebimento}
           />
         </div>
       </div>

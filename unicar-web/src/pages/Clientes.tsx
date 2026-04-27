@@ -1243,10 +1243,6 @@ export function ClientesPage() {
               </button>
             )}
           </div>
-          <Button variant="secondary" size="sm">
-            <Icon name="download" size={12} />
-            Exportar
-          </Button>
         </div>
 
         {/* Table */}

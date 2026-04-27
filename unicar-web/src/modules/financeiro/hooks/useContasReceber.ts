@@ -101,6 +101,23 @@ export function useMarcarRecebido() {
   })
 }
 
+export function useDesfazerRecebimento() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from('os_parcelas')
+        .update({ status: 'pendente', data_pagamento: null, valor_recebido: null, forma_pagamento_recebido: null })
+        .eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['contas-receber'] })
+      qc.invalidateQueries({ queryKey: ['resumo-receber'] })
+    },
+  })
+}
+
 export function useRecebimentoParcial() {
   const qc = useQueryClient()
   return useMutation({

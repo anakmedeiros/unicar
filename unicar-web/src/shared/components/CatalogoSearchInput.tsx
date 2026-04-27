@@ -58,13 +58,13 @@ export function CatalogoSearchInput({
           position: 'absolute', top: '100%', left: 0, right: 0,
           background: '#fff', border: '1px solid #CFCCC6', borderRadius: 5,
           boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 200,
-          maxHeight: 180, overflowY: 'auto', marginTop: 2,
+          maxHeight: 240, overflowY: 'auto', marginTop: 2,
         }}>
           {filtered.map(item => (
             <div
               key={item.id}
               onMouseDown={e => { e.preventDefault(); onSelect(item); setOpen(false) }}
-              style={{ padding: '7px 10px', cursor: 'pointer', borderBottom: '1px solid #F4F2ED' }}
+              style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid #F4F2ED' }}
               onMouseEnter={e => (e.currentTarget.style.background = '#F4F2ED')}
               onMouseLeave={e => (e.currentTarget.style.background = '#fff')}
             >
