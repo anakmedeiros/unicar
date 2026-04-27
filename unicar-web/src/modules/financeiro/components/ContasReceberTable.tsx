@@ -55,29 +55,6 @@ export function ContasReceberTable({
     allSelected ? onDeselectAll() : onSelectAll()
   }
 
-  function exportCSV() {
-    const list = parcelas.filter(p => selectedIds.size === 0 || selectedIds.has(p.id))
-    const headers = ['Data vencimento', 'OS', 'Cliente', 'Veículo', 'Descrição', 'Valor', 'Status pagamento', 'Data pagamento']
-    const rows = list.map(p => [
-      formatDate(p.data_vencimento),
-      p.os_numero,
-      p.cliente_nome,
-      [p.veiculo_modelo, p.veiculo_placa].filter(Boolean).join(' '),
-      getDescricao(p.forma_pagamento, p.pagamento_tipo, p.numero, p.num_parcelas),
-      formatCurrency(p.valor),
-      STATUS_PAG_STYLE[p.statusEfetivo].label,
-      p.data_pagamento ? formatDate(p.data_pagamento) : '',
-    ])
-    const csv = [headers, ...rows].map(r => r.map(v => `"${v}"`).join(',')).join('\n')
-    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `contas-receber-${new Date().toISOString().slice(0, 10)}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
   return (
     <div
       style={{
