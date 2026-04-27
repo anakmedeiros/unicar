@@ -1,9 +1,13 @@
+import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { Icon, type IconName } from '../ui/Icon'
 import { LogoFull } from '../ui/MarkSpeed'
 import { Avatar } from '../ui/Avatar'
 
-interface NavItem {
+// ─── Nav structure ────────────────────────────────────────────────────────────
+
+type NavLink = {
+  type?: 'link'
   id: string
   label: string
   icon: IconName
@@ -11,18 +15,39 @@ interface NavItem {
   path: string
 }
 
-const NAV: NavItem[] = [
-  { id: 'dashboard',  label: 'Dashboard',         icon: 'dashboard', section: null,       path: '/' },
-  { id: 'os',         label: 'Ordens de Serviço', icon: 'wrench',    section: 'OPERAÇÃO', path: '/os' },
-  { id: 'orcamentos', label: 'Orçamentos',         icon: 'doc',       section: null,       path: '/orcamentos' },
-  { id: 'agenda',     label: 'Agenda',             icon: 'calendar',  section: null,       path: '/agenda' },
-  { id: 'clientes',   label: 'Clientes',           icon: 'users',     section: 'CADASTROS',path: '/clientes' },
-  { id: 'veiculos',   label: 'Veículos',           icon: 'car',       section: null,       path: '/veiculos' },
-  { id: 'pecas',      label: 'Peças e Serviços',   icon: 'box',       section: null,       path: '/pecas' },
-  { id: 'financeiro', label: 'Financeiro',         icon: 'cash',      section: 'FINANCEIRO', path: '/financeiro' },
-  { id: 'relatorios', label: 'Relatórios',         icon: 'chart',     section: null,       path: '/relatorios' },
-  { id: 'config',     label: 'Configurações',      icon: 'gear',      section: 'SISTEMA',  path: '/configuracoes' },
+type NavGroup = {
+  type: 'group'
+  id: string
+  label: string
+  icon: IconName
+  section?: string | null
+  children: { id: string; label: string; path: string; disabled?: boolean; badge?: string }[]
+}
+
+type NavEntry = NavLink | NavGroup
+
+const NAV: NavEntry[] = [
+  { id: 'dashboard', label: 'Dashboard',         icon: 'dashboard', section: null,       path: '/' },
+  { id: 'os',        label: 'Ordens de Serviço', icon: 'wrench',    section: 'OPERAÇÃO', path: '/os' },
+  { id: 'agenda',    label: 'Agenda',             icon: 'calendar',  section: null,       path: '/agenda' },
+  { id: 'clientes',  label: 'Clientes',           icon: 'users',     section: 'CADASTROS',path: '/clientes' },
+  { id: 'pecas',     label: 'Peças e Serviços',   icon: 'box',       section: null,       path: '/pecas' },
+  {
+    type: 'group',
+    id: 'financeiro',
+    label: 'Financeiro',
+    icon: 'cash',
+    section: 'FINANCEIRO',
+    children: [
+      { id: 'contas-receber', label: 'Contas a Receber', path: '/financeiro/contas-a-receber' },
+      { id: 'contas-pagar',   label: 'Contas a Pagar',   path: '/financeiro/contas-a-pagar', disabled: true, badge: 'Em breve' },
+    ],
+  },
+  { id: 'relatorios', label: 'Relatórios',     icon: 'chart', section: null,      path: '/relatorios' },
+  { id: 'config',     label: 'Configurações',  icon: 'gear',  section: 'SISTEMA', path: '/configuracoes' },
 ]
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 interface SidebarProps {
   collapsed?: boolean
@@ -31,6 +56,18 @@ interface SidebarProps {
 
 export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
   const location = useLocation()
+
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
+    () => new Set(location.pathname.startsWith('/financeiro') ? ['financeiro'] : [])
+  )
+
+  function toggleGroup(id: string) {
+    setExpandedGroups(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
 
   return (
     <aside
@@ -92,14 +129,12 @@ export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
           overflow: 'auto',
         }}
       >
-        {NAV.map((item, i) => {
-          const isActive = location.pathname === item.path ||
-            (item.path !== '/' && location.pathname.startsWith(item.path))
-          const prevItem = NAV[i - 1]
-          const showSection = item.section && item.section !== prevItem?.section
+        {NAV.map((entry, i) => {
+          const prevEntry = NAV[i - 1]
+          const showSection = entry.section && entry.section !== prevEntry?.section
 
           return (
-            <div key={item.id}>
+            <div key={entry.id}>
               {showSection && !collapsed && (
                 <div
                   style={{
@@ -111,7 +146,7 @@ export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
                     textTransform: 'uppercase',
                   }}
                 >
-                  {item.section}
+                  {entry.section}
                 </div>
               )}
               {showSection && collapsed && i > 0 && (
@@ -123,49 +158,18 @@ export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
                   }}
                 />
               )}
-              <Link
-                to={item.path}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 10,
-                  padding: collapsed ? '10px' : '8px 12px',
-                  borderRadius: 6,
-                  fontSize: 12.5,
-                  color: isActive ? '#fff' : '#B8B6B1',
-                  background: isActive ? 'rgba(227,30,45,0.14)' : 'transparent',
-                  textDecoration: 'none',
-                  justifyContent: collapsed ? 'center' : 'flex-start',
-                  transition: 'background 0.15s, color 0.15s',
-                }}
-                onMouseEnter={e => {
-                  if (!isActive) {
-                    (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.04)'
-                    ;(e.currentTarget as HTMLElement).style.color = '#fff'
-                  }
-                }}
-                onMouseLeave={e => {
-                  if (!isActive) {
-                    (e.currentTarget as HTMLElement).style.background = 'transparent'
-                    ;(e.currentTarget as HTMLElement).style.color = '#B8B6B1'
-                  }
-                }}
-                title={collapsed ? item.label : undefined}
-              >
-                <span
-                  style={{
-                    width: 16,
-                    height: 16,
-                    display: 'grid',
-                    placeItems: 'center',
-                    color: isActive ? '#E31E2D' : '#8C8A85',
-                    flexShrink: 0,
-                  }}
-                >
-                  <Icon name={item.icon} size={15} />
-                </span>
-                {!collapsed && <span>{item.label}</span>}
-              </Link>
+
+              {entry.type === 'group' ? (
+                <GroupItem
+                  entry={entry}
+                  collapsed={collapsed}
+                  expanded={expandedGroups.has(entry.id)}
+                  location={location.pathname}
+                  onToggle={() => collapsed ? onToggle?.() : toggleGroup(entry.id)}
+                />
+              ) : (
+                <LinkItem entry={entry} collapsed={collapsed} location={location.pathname} />
+              )}
             </div>
           )
         })}
@@ -211,4 +215,211 @@ export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
       </div>
     </aside>
   )
+}
+
+// ─── LinkItem ─────────────────────────────────────────────────────────────────
+
+function LinkItem({
+  entry,
+  collapsed,
+  location,
+}: {
+  entry: NavLink
+  collapsed: boolean
+  location: string
+}) {
+  const isActive = location === entry.path ||
+    (entry.path !== '/' && location.startsWith(entry.path))
+
+  return (
+    <Link
+      to={entry.path}
+      style={linkStyle(isActive, collapsed)}
+      onMouseEnter={e => { if (!isActive) hoverOn(e.currentTarget as HTMLElement) }}
+      onMouseLeave={e => { if (!isActive) hoverOff(e.currentTarget as HTMLElement) }}
+      title={collapsed ? entry.label : undefined}
+    >
+      <span style={iconWrap(isActive)}>
+        <Icon name={entry.icon} size={15} />
+      </span>
+      {!collapsed && <span>{entry.label}</span>}
+    </Link>
+  )
+}
+
+// ─── GroupItem ────────────────────────────────────────────────────────────────
+
+function GroupItem({
+  entry,
+  collapsed,
+  expanded,
+  location,
+  onToggle,
+}: {
+  entry: NavGroup
+  collapsed: boolean
+  expanded: boolean
+  location: string
+  onToggle: () => void
+}) {
+  const isGroupActive = entry.children.some(c => !c.disabled && location.startsWith(c.path))
+
+  return (
+    <div>
+      {/* Group header button */}
+      <button
+        onClick={onToggle}
+        style={{
+          ...linkStyle(isGroupActive, collapsed),
+          display: 'flex',
+          width: '100%',
+          background: isGroupActive ? 'rgba(227,30,45,0.14)' : 'transparent',
+          border: 'none',
+          cursor: 'pointer',
+          fontFamily: 'inherit',
+        } as React.CSSProperties}
+        onMouseEnter={e => { if (!isGroupActive) hoverOn(e.currentTarget as HTMLElement) }}
+        onMouseLeave={e => { if (!isGroupActive) hoverOff(e.currentTarget as HTMLElement) }}
+        title={collapsed ? entry.label : undefined}
+      >
+        <span style={iconWrap(isGroupActive)}>
+          <Icon name={entry.icon} size={15} />
+        </span>
+        {!collapsed && (
+          <>
+            <span style={{ flex: 1, textAlign: 'left' }}>{entry.label}</span>
+            <Icon
+              name={expanded ? 'chevron-down' : 'chevron'}
+              size={11}
+              style={{ color: '#6A6864', flexShrink: 0 }}
+            />
+          </>
+        )}
+      </button>
+
+      {/* Children */}
+      {expanded && !collapsed && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 1, marginTop: 1, paddingLeft: 8 }}>
+          {entry.children.map(child => {
+            const isActive = !child.disabled && location === child.path
+
+            if (child.disabled) {
+              return (
+                <div
+                  key={child.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '6px 12px 6px 20px',
+                    fontSize: 12,
+                    color: '#4A4A48',
+                    cursor: 'not-allowed',
+                    borderRadius: 5,
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 4,
+                      height: 4,
+                      borderRadius: '50%',
+                      background: '#4A4A48',
+                      flexShrink: 0,
+                    }}
+                  />
+                  <span style={{ flex: 1 }}>{child.label}</span>
+                  {child.badge && (
+                    <span
+                      style={{
+                        fontSize: 9,
+                        fontWeight: 700,
+                        color: '#6A6864',
+                        background: 'rgba(255,255,255,0.08)',
+                        padding: '1px 5px',
+                        borderRadius: 3,
+                        letterSpacing: '0.04em',
+                      }}
+                    >
+                      {child.badge}
+                    </span>
+                  )}
+                </div>
+              )
+            }
+
+            return (
+              <Link
+                key={child.id}
+                to={child.path}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '6px 12px 6px 20px',
+                  fontSize: 12,
+                  color: isActive ? '#fff' : '#B8B6B1',
+                  background: isActive ? 'rgba(227,30,45,0.14)' : 'transparent',
+                  textDecoration: 'none',
+                  borderRadius: 5,
+                  transition: 'background 0.15s, color 0.15s',
+                }}
+                onMouseEnter={e => { if (!isActive) hoverOn(e.currentTarget as HTMLElement) }}
+                onMouseLeave={e => { if (!isActive) hoverOff(e.currentTarget as HTMLElement) }}
+              >
+                <span
+                  style={{
+                    width: 4,
+                    height: 4,
+                    borderRadius: '50%',
+                    background: isActive ? '#E31E2D' : '#4A4A48',
+                    flexShrink: 0,
+                  }}
+                />
+                {child.label}
+              </Link>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Style helpers ────────────────────────────────────────────────────────────
+
+function linkStyle(isActive: boolean, collapsed: boolean): React.CSSProperties {
+  return {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    padding: collapsed ? '10px' : '8px 12px',
+    borderRadius: 6,
+    fontSize: 12.5,
+    color: isActive ? '#fff' : '#B8B6B1',
+    background: isActive ? 'rgba(227,30,45,0.14)' : 'transparent',
+    textDecoration: 'none',
+    justifyContent: collapsed ? 'center' : 'flex-start',
+    transition: 'background 0.15s, color 0.15s',
+  }
+}
+
+function iconWrap(isActive: boolean): React.CSSProperties {
+  return {
+    width: 16,
+    height: 16,
+    display: 'grid',
+    placeItems: 'center',
+    color: isActive ? '#E31E2D' : '#8C8A85',
+    flexShrink: 0,
+  }
+}
+
+function hoverOn(el: HTMLElement) {
+  el.style.background = 'rgba(255,255,255,0.04)'
+  el.style.color = '#fff'
+}
+
+function hoverOff(el: HTMLElement) {
+  el.style.background = 'transparent'
+  el.style.color = '#B8B6B1'
 }
