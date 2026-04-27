@@ -147,6 +147,28 @@ export interface Veiculo {
   km: string
 }
 
+export interface HistoricoOSRow {
+  id: string
+  numero: string
+  status: OrdemServicoStatus
+  clienteNome: string
+  veiculoPlaca: string
+  veiculoModelo: string
+  tecnicoNome: string
+  tecnicoId: string
+  valorTotal: number
+  data: string
+  dataLiberacao: string | null
+  itens: { descricao: string; tipo: 'servico' | 'peca' }[]
+}
+
+export interface OSHistoricoItem {
+  id: string
+  statusAnterior: string | null
+  statusNovo: string
+  createdAt: string
+}
+
 export interface Cliente {
   id: string
   tipo: 'PF' | 'PJ'

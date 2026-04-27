@@ -94,7 +94,7 @@ export function CalendarioMensal({ ano, mes, eventos, onMonthChange, onDayClick,
   for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7))
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
       {/* Calendar header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 0 6px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -123,7 +123,7 @@ export function CalendarioMensal({ ano, mes, eventos, onMonthChange, onDayClick,
       </div>
 
       {/* Grid */}
-      <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateRows: `repeat(${rows.length}, 1fr)` }}>
+      <div style={{ display: 'grid', gridTemplateRows: `repeat(${rows.length}, minmax(90px, auto))` }}>
         {rows.map((row, ri) => (
           <div key={ri} style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderBottom: ri < rows.length - 1 ? '1px solid #e5e7eb' : 'none' }}>
             {row.map(cell => {

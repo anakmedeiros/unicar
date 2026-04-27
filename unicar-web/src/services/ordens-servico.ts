@@ -7,6 +7,8 @@ import type {
   OSParcela,
   Tecnico,
   CatalogoItem,
+  HistoricoOSRow,
+  OSHistoricoItem,
 } from '../types'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -348,6 +350,69 @@ export const ordensServicoService = {
   async updateStatus(id: string, status: string): Promise<void> {
     const { error } = await supabase.from('ordens_servico').update({ status }).eq('id', id)
     if (error) throw error
+  },
+
+  async listHistorico(): Promise<HistoricoOSRow[]> {
+    const { data, error } = await supabase
+      .from('ordens_servico')
+      .select(`
+        id, numero, status, desconto, data, data_liberacao, tecnico_id,
+        clientes (nome),
+        veiculos (placa, modelo),
+        tecnicos!tecnico_id (nome),
+        os_itens (tipo, descricao, qtd, valor_unit)
+      `)
+      .in('status', ['veiculo_liberado', 'entregue'])
+      .order('data_liberacao', { ascending: false })
+    if (error) throw error
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (data ?? []).map((row: any): HistoricoOSRow => {
+      const items = (row.os_itens ?? []) as { qtd: number; valor_unit: number; tipo: string; descricao: string }[]
+      const subtotal = items.reduce((s, i) => s + (i.qtd ?? 0) * (i.valor_unit ?? 0), 0)
+      return {
+        id: row.id,
+        numero: row.numero ?? '',
+        status: row.status ?? 'veiculo_liberado',
+        clienteNome: row.clientes?.nome ?? '',
+        veiculoPlaca: row.veiculos?.placa ?? '',
+        veiculoModelo: row.veiculos?.modelo ?? '',
+        tecnicoNome: row.tecnicos?.nome ?? '',
+        tecnicoId: row.tecnico_id ?? '',
+        valorTotal: Math.max(0, subtotal - (row.desconto ?? 0)),
+        data: row.data ?? '',
+        dataLiberacao: row.data_liberacao ?? null,
+        itens: items.map(i => ({ descricao: i.descricao ?? '', tipo: (i.tipo ?? 'servico') as 'servico' | 'peca' })),
+      }
+    })
+  },
+
+  async getOSStatusHistorico(osId: string): Promise<OSHistoricoItem[]> {
+    const { data, error } = await supabase
+      .from('os_historico')
+      .select('id, status_anterior, status_novo, created_at')
+      .eq('os_id', osId)
+      .order('created_at', { ascending: true })
+    if (error) throw error
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (data ?? []).map((r: any): OSHistoricoItem => ({
+      id: r.id,
+      statusAnterior: r.status_anterior ?? null,
+      statusNovo: r.status_novo ?? '',
+      createdAt: r.created_at ?? '',
+    }))
+  },
+
+  async reabrirOS(id: string, statusAnterior: OrdemServicoStatus): Promise<void> {
+    const { error } = await supabase
+      .from('ordens_servico')
+      .update({ status: 'aberta', data_liberacao: null })
+      .eq('id', id)
+    if (error) throw error
+    await supabase.from('os_historico').insert({
+      os_id: id,
+      status_anterior: statusAnterior,
+      status_novo: 'aberta',
+    })
   },
 
   async historicoVeiculo(veiculoId: string, excludeId?: string): Promise<{ id: string; numero: string; data: string; tipoServico: string }[]> {

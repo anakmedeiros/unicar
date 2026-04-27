@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
 import { Topbar } from '../components/layout/Topbar'
-import { Button } from '../components/ui/Button'
 import { Icon } from '../components/ui/Icon'
 import { ToastNotification } from '../shared/components/Toast'
 import type { ToastItem } from '../shared/components/Toast'
@@ -150,7 +149,7 @@ export function AgendamentosPage() {
     <>
       <Topbar title="Agendamentos" hideSearch />
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: 16 }}>
+      <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
         {/* Page header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: '#1A1A1A' }}>Calendário</div>
@@ -170,16 +169,11 @@ export function AgendamentosPage() {
                 EM BREVE
               </span>
             </button>
-
-            <Button variant="primary" size="sm" onClick={() => { setDatePrefill(''); setChoiceDay('__new__') }}>
-              <Icon name="plus" size={13} />
-              Novo
-            </Button>
           </div>
         </div>
 
         {/* Calendar */}
-        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: '#fff', border: '1px solid #E3E0D9', borderRadius: 8, overflow: 'hidden', boxShadow: '0 1px 2px rgba(0,0,0,0.03)', padding: '8px 8px 8px' }}>
+        <div style={{ background: '#fff', border: '1px solid #E3E0D9', borderRadius: 8, boxShadow: '0 1px 2px rgba(0,0,0,0.03)', padding: '8px' }}>
           <CalendarioMensal
             ano={calAno}
             mes={calMes}

@@ -300,9 +300,10 @@ interface ClienteSearchProps {
   clientes: Cliente[]
   onSelect: (c: Cliente) => void
   error?: boolean
+  onCadastrarRapido?: (nome: string) => void
 }
 
-function ClienteSearch({ value, clientes, onSelect, error }: ClienteSearchProps) {
+function ClienteSearch({ value, clientes, onSelect, error, onCadastrarRapido }: ClienteSearchProps) {
   const [search, setSearch] = useState(value)
   const [open, setOpen] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -311,10 +312,13 @@ function ClienteSearch({ value, clientes, onSelect, error }: ClienteSearchProps)
 
   const filtered = useMemo(() =>
     search
-      ? clientes.filter(c =>
-          c.nome.toLowerCase().includes(search.toLowerCase()) ||
-          c.documento.includes(search.replace(/\D/g, ''))
-        ).slice(0, 8)
+      ? clientes
+          .filter(c =>
+            c.nome.toLowerCase().includes(search.toLowerCase()) ||
+            c.documento.includes(search.replace(/\D/g, ''))
+          )
+          .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+          .slice(0, 8)
       : [],
     [clientes, search]
   )
@@ -327,6 +331,8 @@ function ClienteSearch({ value, clientes, onSelect, error }: ClienteSearchProps)
     return () => document.removeEventListener('mousedown', handleOut)
   }, [])
 
+  const showDropdown = open && search.trim().length > 0 && (filtered.length > 0 || !!onCadastrarRapido)
+
   return (
     <div ref={wrapRef} style={{ position: 'relative' }}>
       <input
@@ -337,8 +343,13 @@ function ClienteSearch({ value, clientes, onSelect, error }: ClienteSearchProps)
         onFocus={e => { e.currentTarget.style.borderColor = '#E31E2D'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(227,30,45,0.08)'; setOpen(true) }}
         onBlur={e => { e.currentTarget.style.borderColor = error ? '#E31E2D' : '#CFCCC6'; e.currentTarget.style.boxShadow = error ? '0 0 0 3px rgba(227,30,45,0.08)' : 'none' }}
       />
-      {open && filtered.length > 0 && (
+      {showDropdown && (
         <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #CFCCC6', borderRadius: 5, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 200, maxHeight: 220, overflowY: 'auto', marginTop: 2 }}>
+          {filtered.length === 0 && (
+            <div style={{ padding: '8px 12px', fontSize: 12, color: '#8A8A8A', fontStyle: 'italic' }}>
+              Nenhum cliente encontrado
+            </div>
+          )}
           {filtered.map(c => (
             <div
               key={c.id}
@@ -349,12 +360,133 @@ function ClienteSearch({ value, clientes, onSelect, error }: ClienteSearchProps)
             >
               <div style={{ fontSize: 12, fontWeight: 600, color: '#1A1A1A' }}>{c.nome}</div>
               <div style={{ fontSize: 10.5, color: '#8A8A8A', fontFamily: "'JetBrains Mono', monospace", marginTop: 1 }}>
-                {formatDoc(c.documento)} · {c.veiculos.length} veículo{c.veiculos.length !== 1 ? 's' : ''}
+                {c.documento ? formatDoc(c.documento) + ' · ' : ''}{c.veiculos.length} veículo{c.veiculos.length !== 1 ? 's' : ''}
               </div>
             </div>
           ))}
+          {onCadastrarRapido && filtered.length === 0 && (
+            <div
+              onMouseDown={e => { e.preventDefault(); onCadastrarRapido(search.trim()); setOpen(false) }}
+              style={{ padding: '8px 12px', cursor: 'pointer', fontSize: 12, color: '#E31E2D', display: 'flex', alignItems: 'center', gap: 6, borderTop: filtered.length > 0 ? '1px solid #EBE8E2' : 'none' }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#FEF2F2')}
+              onMouseLeave={e => (e.currentTarget.style.background = '#fff')}
+            >
+              <span style={{ fontWeight: 700, fontSize: 14, lineHeight: 1 }}>+</span>
+              Cadastrar "{search.trim()}" rapidamente
+            </div>
+          )}
         </div>
       )}
+    </div>
+  )
+}
+
+// ─── Modal cadastro rápido de cliente ────────────────────────────────────────
+
+function ModalCadastroRapidoCliente({
+  open, nomeInicial, onClose, onSaved,
+}: { open: boolean; nomeInicial: string; onClose: () => void; onSaved: (c: Cliente) => void }) {
+  const qc = useQueryClient()
+  const [nome, setNome] = useState('')
+  const [cep, setCep] = useState('')
+  const [cidade, setCidade] = useState('')
+  const [estado, setEstado] = useState('')
+  const [telefone, setTelefone] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [cepLoading, setCepLoading] = useState(false)
+  const [errs, setErrs] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    if (!open) return
+    setNome(nomeInicial); setCep(''); setCidade(''); setEstado(''); setTelefone(''); setErrs({}); setSaving(false)
+  }, [open, nomeInicial])
+
+  async function handleCepChange(v: string) {
+    const clean = v.replace(/\D/g, '').slice(0, 8)
+    setCep(clean.length > 5 ? `${clean.slice(0, 5)}-${clean.slice(5)}` : clean)
+    if (clean.length === 8) {
+      setCepLoading(true)
+      try {
+        const res = await fetch(`https://viacep.com.br/ws/${clean}/json/`)
+        const d = await res.json()
+        if (!d.erro) { setCidade(d.localidade ?? ''); setEstado(d.uf ?? '') }
+      } catch { /* silent */ }
+      setCepLoading(false)
+    }
+  }
+
+  async function handleSave() {
+    const e: Record<string, string> = {}
+    if (!nome.trim()) e.nome = 'Informe o nome'
+    if (cep.replace(/\D/g, '').length < 8) e.cep = 'CEP inválido'
+    if (Object.keys(e).length) { setErrs(e); return }
+    setSaving(true)
+    try {
+      const c = await clientesService.create({
+        tipo: 'PF', nome: nome.trim(), documento: '', telefone: telefone.replace(/\D/g, ''),
+        cep: cep.replace(/\D/g, ''), cidade, estado, veiculos: [],
+      })
+      qc.invalidateQueries({ queryKey: ['clientes'] })
+      onSaved(c)
+    } catch (err) {
+      setErrs({ save: (err as { message?: string }).message ?? 'Erro ao cadastrar' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!open) return null
+
+  const inp: React.CSSProperties = {
+    width: '100%', border: '1px solid #CFCCC6', borderRadius: 5,
+    padding: '8px 10px', fontSize: 12.5, color: '#1A1A1A',
+    outline: 'none', background: '#fff', fontFamily: 'inherit', boxSizing: 'border-box',
+  }
+
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div style={{ background: '#fff', borderRadius: 8, width: 400, maxWidth: '100%', boxShadow: '0 16px 48px rgba(0,0,0,0.25)' }}>
+        <div style={{ padding: '14px 20px', borderBottom: '1px solid #EBE8E2', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: '#1A1A1A' }}>Cadastro rápido de cliente</div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8A8A8A', padding: 4, display: 'grid', placeItems: 'center' }}>
+            <Icon name="x" size={14} />
+          </button>
+        </div>
+        <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            <label style={{ fontSize: 11, fontWeight: 600, color: '#4A4A4A' }}>Nome *</label>
+            <input value={nome} onChange={e => setNome(e.target.value)} style={{ ...inp, borderColor: errs.nome ? '#E31E2D' : '#CFCCC6' }} />
+            {errs.nome && <span style={{ fontSize: 10.5, color: '#E31E2D' }}>{errs.nome}</span>}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            <label style={{ fontSize: 11, fontWeight: 600, color: '#4A4A4A' }}>CEP *</label>
+            <div style={{ position: 'relative' }}>
+              <input
+                value={cep} onChange={e => handleCepChange(e.target.value)}
+                placeholder="00000-000"
+                style={{ ...inp, borderColor: errs.cep ? '#E31E2D' : '#CFCCC6' }}
+              />
+              {cepLoading && <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 10.5, color: '#8A8A8A', pointerEvents: 'none' }}>buscando…</span>}
+            </div>
+            {errs.cep && <span style={{ fontSize: 10.5, color: '#E31E2D' }}>{errs.cep}</span>}
+            {cidade && !errs.cep && <span style={{ fontSize: 11, color: '#4A4A4A' }}>{cidade} — {estado}</span>}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            <label style={{ fontSize: 11, fontWeight: 600, color: '#4A4A4A' }}>Telefone</label>
+            <input value={telefone} onChange={e => setTelefone(formatPhone(e.target.value))} placeholder="(00) 00000-0000" style={inp} />
+          </div>
+          {errs.save && <span style={{ fontSize: 11.5, color: '#E31E2D' }}>{errs.save}</span>}
+        </div>
+        <div style={{ padding: '12px 20px', borderTop: '1px solid #EBE8E2', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <Button variant="secondary" size="sm" onClick={onClose} disabled={saving}>Cancelar</Button>
+          <Button variant="primary" size="sm" onClick={handleSave} disabled={saving}>
+            {saving ? 'Cadastrando...' : 'Cadastrar'}
+          </Button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -699,14 +831,19 @@ interface OSModalProps {
   onSaveDraft: () => void
   onGerarOrcamento: () => void
   onIniciarOS: () => void
+  readOnly?: boolean
+  statusHistory?: { id: string; statusAnterior: string | null; statusNovo: string; createdAt: string }[]
 }
 
 function OSModal({
   open, mode, form, lastSaved, isSaving,
   clientes, tecnicos, catalogoServicos, catalogoPecas, historico,
   errors, onFormChange, onClose, onSaveDraft, onGerarOrcamento, onIniciarOS,
+  readOnly = false, statusHistory = [],
 }: OSModalProps) {
   const [saveText, setSaveText] = useState('')
+  const [cadRapidoOpen, setCadRapidoOpen] = useState(false)
+  const [cadRapidoNome, setCadRapidoNome] = useState('')
 
   useEffect(() => {
     if (!lastSaved) return
@@ -743,14 +880,22 @@ function OSModal({
   const desconto         = parseFloat(form.desconto) || 0
   const totalGeral       = subtotalServicos + subtotalPecas - desconto
 
+  // Sync pagamentoTotal with totalGeral whenever items/discount change
+  useEffect(() => {
+    onFormChange({ pagamentoTotal: totalGeral > 0 ? totalGeral.toFixed(2) : '' })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [totalGeral])
+
   // Client vehicles (derived from selected client)
   const clienteVeiculos = useMemo(() => {
     return clientes.find(c => c.id === form.clienteId)?.veiculos ?? []
   }, [clientes, form.clienteId])
 
-  const subtitle = mode === 'new'
-    ? `${STATUS_LABEL[form.status]} · ${isSaving ? 'salvando…' : lastSaved ? saveText : 'não salvo'}`
-    : `${STATUS_LABEL[form.status]} · ${isSaving ? 'salvando…' : lastSaved ? saveText : ''}`
+  const subtitle = readOnly
+    ? STATUS_LABEL[form.status]
+    : mode === 'new'
+      ? `${STATUS_LABEL[form.status]} · ${isSaving ? 'salvando…' : lastSaved ? saveText : 'não salvo'}`
+      : `${STATUS_LABEL[form.status]} · ${isSaving ? 'salvando…' : lastSaved ? saveText : ''}`
 
   // Inline styles helpers
   const inputSm: React.CSSProperties = {
@@ -816,23 +961,27 @@ function OSModal({
           }}>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 15, fontWeight: 700, color: '#1A1A1A', letterSpacing: '-0.01em' }}>
-                {mode === 'new' ? 'Nova Ordem de Serviço' : `Editar OS ${form.numero}`}
+                {readOnly ? `OS ${form.numero}` : mode === 'new' ? 'Nova Ordem de Serviço' : `Editar OS ${form.numero}`}
               </div>
               <div style={{ fontSize: 11, color: '#8A8A8A', marginTop: 2 }}>{subtitle}</div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-              <Button variant="secondary" size="sm" onClick={onSaveDraft} disabled={isSaving}>
-                <Icon name="save" size={12} />
-                Salvar rascunho
-              </Button>
-              <Button variant="secondary" size="sm" onClick={onGerarOrcamento}>
-                <Icon name="doc" size={12} />
-                Gerar Orçamento
-              </Button>
-              <Button variant="primary" size="sm" onClick={onIniciarOS} disabled={isSaving || form.status === 'entregue' || form.status === 'cancelada'}>
-                <Icon name="play" size={12} />
-                Iniciar OS
-              </Button>
+              {!readOnly && (
+                <>
+                  <Button variant="secondary" size="sm" onClick={onSaveDraft} disabled={isSaving}>
+                    <Icon name="save" size={12} />
+                    Salvar rascunho
+                  </Button>
+                  <Button variant="secondary" size="sm" onClick={onGerarOrcamento}>
+                    <Icon name="doc" size={12} />
+                    Gerar Orçamento
+                  </Button>
+                  <Button variant="primary" size="sm" onClick={onIniciarOS} disabled={isSaving || form.status === 'entregue' || form.status === 'cancelada'}>
+                    <Icon name="play" size={12} />
+                    Iniciar OS
+                  </Button>
+                </>
+              )}
               <button
                 type="button"
                 onClick={onClose}
@@ -901,6 +1050,7 @@ function OSModal({
                           veiculoId: '',
                         })
                       }}
+                      onCadastrarRapido={nome => { setCadRapidoNome(nome); setCadRapidoOpen(true) }}
                     />
                   </Field>
 
@@ -1086,6 +1236,15 @@ function OSModal({
                         parcelas={form.parcelas}
                         onChange={parcelas => onFormChange({ parcelas })}
                       />
+                      <button
+                        type="button"
+                        onClick={() => onFormChange({ pagamentoTipo: 'unico', parcelas: [], pagamentoTotal: '', pagamentoNumeroParcelas: '', pagamentoPrimeiraParcela: '' })}
+                        style={{ fontSize: 11.5, color: '#8A8A8A', background: 'none', border: 'none', cursor: 'pointer', padding: '6px 0', fontFamily: 'inherit', textDecoration: 'none' }}
+                        onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
+                        onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
+                      >
+                        Cancelar parcelamento
+                      </button>
                     </>
                   )}
                 </div>
@@ -1231,6 +1390,23 @@ function OSModal({
           to   { opacity: 0; transform: translateY(6px) scale(0.96);  }
         }
       `}</style>
+
+      <ModalCadastroRapidoCliente
+        open={cadRapidoOpen}
+        nomeInicial={cadRapidoNome}
+        onClose={() => setCadRapidoOpen(false)}
+        onSaved={c => {
+          const endereco = [c.rua, c.bairro, c.cidade, c.estado].filter(Boolean).join(', ')
+          onFormChange({
+            clienteId:        c.id,
+            clienteNome:      c.nome,
+            clienteDocumento: c.documento,
+            clienteEndereco:  endereco,
+            veiculoId: '',
+          })
+          setCadRapidoOpen(false)
+        }}
+      />
     </>
   )
 }
@@ -1351,7 +1527,10 @@ export function OrdensServicoPage() {
   const liberarMutation = useMutation({
     mutationFn: async (row: OrdemServicoRow) => {
       const { error } = await import('../lib/supabase').then(m =>
-        m.supabase.from('ordens_servico').update({ status: 'veiculo_liberado' }).eq('id', row.id)
+        m.supabase.from('ordens_servico').update({
+          status: 'veiculo_liberado',
+          data_liberacao: new Date().toISOString(),
+        }).eq('id', row.id)
       )
       if (error) throw error
       try {
