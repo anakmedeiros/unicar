@@ -7,6 +7,7 @@ interface TopbarProps {
   section?: string          // mostra "section › title" no breadcrumb
   subtitle?: string
   actions?: ReactNode
+  hideSearch?: boolean
   searchPlaceholder?: string
   searchValue?: string
   onSearchChange?: (v: string) => void
@@ -24,6 +25,7 @@ export function Topbar({
   section,
   subtitle,
   actions,
+  hideSearch = false,
   searchPlaceholder = 'Buscar OS, cliente, placa…',
   searchValue,
   onSearchChange,
@@ -66,46 +68,48 @@ export function Topbar({
 
       {/* Right actions */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <div style={{ position: 'relative', marginRight: 4 }}>
-          <Icon
-            name="search"
-            size={14}
-            style={{
-              position: 'absolute',
-              left: 9,
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: '#8A8A8A',
-              pointerEvents: 'none',
-            }}
-          />
-          <input
-            placeholder={searchPlaceholder}
-            value={controlled ? searchValue : undefined}
-            onChange={controlled ? e => onSearchChange?.(e.target.value) : undefined}
-            style={{
-              width: 240,
-              height: 32,
-              paddingLeft: 30,
-              paddingRight: 10,
-              border: '1px solid #CFCCC6',
-              borderRadius: 5,
-              background: '#fff',
-              fontSize: 12.5,
-              color: '#1A1A1A',
-              outline: 'none',
-              fontFamily: 'inherit',
-            }}
-            onFocus={e => {
-              e.currentTarget.style.borderColor = '#E31E2D'
-              e.currentTarget.style.boxShadow = '0 0 0 3px rgba(227,30,45,0.08)'
-            }}
-            onBlur={e => {
-              e.currentTarget.style.borderColor = '#CFCCC6'
-              e.currentTarget.style.boxShadow = 'none'
-            }}
-          />
-        </div>
+        {!hideSearch && (
+          <div style={{ position: 'relative', marginRight: 4 }}>
+            <Icon
+              name="search"
+              size={14}
+              style={{
+                position: 'absolute',
+                left: 9,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                color: '#8A8A8A',
+                pointerEvents: 'none',
+              }}
+            />
+            <input
+              placeholder={searchPlaceholder}
+              value={controlled ? searchValue : undefined}
+              onChange={controlled ? e => onSearchChange?.(e.target.value) : undefined}
+              style={{
+                width: 240,
+                height: 32,
+                paddingLeft: 30,
+                paddingRight: 10,
+                border: '1px solid #CFCCC6',
+                borderRadius: 5,
+                background: '#fff',
+                fontSize: 12.5,
+                color: '#1A1A1A',
+                outline: 'none',
+                fontFamily: 'inherit',
+              }}
+              onFocus={e => {
+                e.currentTarget.style.borderColor = '#E31E2D'
+                e.currentTarget.style.boxShadow = '0 0 0 3px rgba(227,30,45,0.08)'
+              }}
+              onBlur={e => {
+                e.currentTarget.style.borderColor = '#CFCCC6'
+                e.currentTarget.style.boxShadow = 'none'
+              }}
+            />
+          </div>
+        )}
 
         <Button variant="ghost" size="sm" aria-label="Notificações">
           <Icon name="bell" size={15} />

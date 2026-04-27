@@ -2,6 +2,7 @@ import { supabase } from '../lib/supabase'
 import type {
   OrdemServico,
   OrdemServicoRow,
+  KanbanOS,
   OSItem,
   OSParcela,
   Tecnico,
@@ -295,6 +296,46 @@ export const ordensServicoService = {
       status_anterior: statusAnterior,
       status_novo: statusNovo,
     })
+    if (error) throw error
+  },
+
+  async listKanban(): Promise<KanbanOS[]> {
+    const { data, error } = await supabase
+      .from('ordens_servico')
+      .select(`
+        id, numero, status, data, problema_relatado, desconto,
+        veiculo_id, tecnico_id,
+        clientes (nome),
+        veiculos (modelo, placa),
+        tecnicos!tecnico_id (nome),
+        os_itens (qtd, valor_unit)
+      `)
+      .not('status', 'in', '("entregue","cancelada")')
+      .order('data', { ascending: false })
+    if (error) throw error
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (data ?? []).map((row: any): KanbanOS => {
+      const items = (row.os_itens ?? []) as { qtd: number; valor_unit: number }[]
+      const subtotal = items.reduce((s, i) => s + (i.qtd ?? 0) * (i.valor_unit ?? 0), 0)
+      return {
+        id: row.id,
+        numero: row.numero ?? '',
+        status: row.status ?? 'aberta',
+        data: row.data ?? '',
+        problema_relatado: row.problema_relatado ?? '',
+        valor_total: Math.max(0, subtotal - (row.desconto ?? 0)),
+        cliente_nome: row.clientes?.nome ?? '',
+        veiculo_modelo: row.veiculos?.modelo ?? '',
+        veiculo_placa: row.veiculos?.placa ?? '',
+        veiculo_id: row.veiculo_id ?? null,
+        tecnico_nome: row.tecnicos?.nome ?? '',
+        tecnico_id: row.tecnico_id ?? null,
+      }
+    })
+  },
+
+  async updateStatus(id: string, status: string): Promise<void> {
+    const { error } = await supabase.from('ordens_servico').update({ status }).eq('id', id)
     if (error) throw error
   },
 

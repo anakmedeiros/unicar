@@ -1592,9 +1592,10 @@ export function OrdensServicoPage() {
       const prevStatus = editingId ? form.status : null
       const saved = await upsertMutation.mutateAsync(payload)
       try { await ordensServicoService.inserirHistorico(saved.id, prevStatus, saved.status) } catch { /* silent */ }
+      qc.invalidateQueries({ queryKey: ['kanban'] })
       setModalOpen(false)
       showToast(`OS ${saved.numero || ''} iniciada com sucesso`)
-      navigate('/os')
+      navigate('/')
     } catch (err) {
       console.error('handleIniciarOS:', err)
       const msg = (err as { message?: string })?.message ?? 'Erro desconhecido'

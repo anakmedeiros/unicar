@@ -116,6 +116,21 @@ export interface OrdemServicoRow {
   data: string
 }
 
+export interface KanbanOS {
+  id: string
+  numero: string
+  status: OrdemServicoStatus
+  data: string
+  problema_relatado: string
+  valor_total: number
+  cliente_nome: string
+  veiculo_modelo: string
+  veiculo_placa: string
+  veiculo_id: string | null
+  tecnico_nome: string
+  tecnico_id: string | null
+}
+
 export interface NavItem {
   id: string
   label: string
