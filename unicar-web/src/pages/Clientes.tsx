@@ -1201,12 +1201,6 @@ export function ClientesPage() {
         searchPlaceholder="Buscar cliente, CPF, placa…"
         searchValue={search}
         onSearchChange={setSearch}
-        actions={
-          <Button variant="primary" size="md" onClick={openNew}>
-            <Icon name="plus" size={13} />
-            Novo cliente
-          </Button>
-        }
       />
 
       <div style={{ flex: 1, overflow: 'auto', padding: 20 }}>
@@ -1309,10 +1303,7 @@ export function ClientesPage() {
               {filtered.map(c => (
                 <tr
                   key={c.id}
-                  onClick={() => openEdit(c)}
-                  style={{ cursor: 'pointer' }}
-                  onMouseEnter={e => (e.currentTarget.style.background = '#F4F2ED')}
-                  onMouseLeave={e => (e.currentTarget.style.background = '')}
+                  style={{ cursor: 'default' }}
                 >
                   {/* Cliente */}
                   <td style={{ padding: '11px 14px', borderBottom: '1px solid #EBE8E2' }}>

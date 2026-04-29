@@ -1,8 +1,10 @@
-import { useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Loader2 } from 'lucide-react'
 import { Icon, type IconName } from '../ui/Icon'
 import { LogoFull } from '../ui/MarkSpeed'
 import { Avatar } from '../ui/Avatar'
+import { supabase } from '../../lib/supabase'
 
 // ─── Nav structure ────────────────────────────────────────────────────────────
 
@@ -55,11 +57,30 @@ interface SidebarProps {
 }
 
 export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
-  const location = useLocation()
-
+  const location   = useLocation()
+  const navigate   = useNavigate()
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
     () => new Set(location.pathname.startsWith('/financeiro') ? ['financeiro'] : [])
   )
+  const [userName,   setUserName]   = useState('...')
+  const [userRole,   setUserRole]   = useState('')
+  const [loggingOut, setLoggingOut] = useState(false)
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session?.user) return
+      const meta = session.user.user_metadata
+      const name = meta?.full_name ?? meta?.name ?? (session.user.email?.split('@')[0] ?? 'Usuário')
+      setUserName(name)
+      setUserRole(meta?.role ?? 'Usuário')
+    })
+  }, [])
+
+  async function handleLogout() {
+    setLoggingOut(true)
+    await supabase.auth.signOut()
+    navigate('/login')
+  }
 
   function toggleGroup(id: string) {
     setExpandedGroups(prev => {
@@ -186,30 +207,31 @@ export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
           justifyContent: collapsed ? 'center' : 'flex-start',
         }}
       >
-        <Avatar name="Carlos Mendes" size={collapsed ? 26 : 30} tone="#3a3a3a" />
+        <Avatar name={userName} size={collapsed ? 26 : 30} tone="#3a3a3a" />
         {!collapsed && (
           <>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                Carlos Mendes
+                {userName}
               </div>
-              <div style={{ fontSize: 10.5, color: '#8A8884' }}>Gerente</div>
+              <div style={{ fontSize: 10.5, color: '#8A8884' }}>{userRole}</div>
             </div>
             <button
               aria-label="Sair"
+              onClick={handleLogout}
+              disabled={loggingOut}
               style={{
-                background: 'transparent',
-                border: 'none',
-                cursor: 'pointer',
-                color: '#8A8884',
-                display: 'grid',
-                placeItems: 'center',
-                padding: 4,
-                borderRadius: 4,
+                background: 'transparent', border: 'none',
+                cursor: loggingOut ? 'not-allowed' : 'pointer',
+                color: '#8A8884', display: 'grid', placeItems: 'center',
+                padding: 4, borderRadius: 4,
               }}
             >
-              <Icon name="logout" size={14} />
+              {loggingOut
+                ? <Loader2 size={14} style={{ animation: 'sbSpin 0.8s linear infinite' }} />
+                : <Icon name="logout" size={14} />}
             </button>
+            <style>{`@keyframes sbSpin { to { transform: rotate(360deg); } }`}</style>
           </>
         )}
       </div>

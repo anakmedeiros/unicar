@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import type { CatalogoItem } from '../../types'
 
 interface CatalogoSearchInputProps {
@@ -14,16 +15,24 @@ export function CatalogoSearchInput({
   value, onChange, onSelect, items, placeholder, style,
 }: CatalogoSearchInputProps) {
   const [open, setOpen] = useState(false)
+  const [dropPos, setDropPos] = useState<{ top: number; left: number; width: number } | null>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
 
   const filtered = useMemo(() => {
     const q = value.trim().toLowerCase()
-    if (!q) return items.slice(0, 4)
+    if (!q) return []
     return items.filter(i =>
       i.nome.toLowerCase().includes(q) ||
       (i.codigo || '').toLowerCase().includes(q)
     ).slice(0, 8)
   }, [items, value])
+
+  function openDrop() {
+    if (!wrapRef.current) return
+    const rect = wrapRef.current.getBoundingClientRect()
+    setDropPos({ top: rect.bottom + 2, left: rect.left, width: rect.width })
+    setOpen(true)
+  }
 
   useEffect(() => {
     function handleOut(e: MouseEvent) {
@@ -37,11 +46,11 @@ export function CatalogoSearchInput({
     <div ref={wrapRef} style={{ position: 'relative', ...style }}>
       <input
         value={value}
-        onChange={e => { onChange(e.target.value); setOpen(true) }}
+        onChange={e => { onChange(e.target.value); openDrop() }}
         onFocus={e => {
           e.currentTarget.style.borderColor = '#E31E2D'
           e.currentTarget.style.boxShadow = '0 0 0 3px rgba(227,30,45,0.08)'
-          setOpen(true)
+          openDrop()
         }}
         onBlur={e => {
           e.currentTarget.style.borderColor = '#CFCCC6'
@@ -54,13 +63,12 @@ export function CatalogoSearchInput({
           outline: 'none', background: '#fff', fontFamily: 'inherit',
         }}
       />
-      {open && filtered.length > 0 && (
+      {open && dropPos && filtered.length > 0 && createPortal(
         <div style={{
-          position: 'absolute', top: '100%', left: 0, right: 0,
+          position: 'fixed', top: dropPos.top, left: dropPos.left, width: dropPos.width,
           background: '#fff', border: '1px solid #CFCCC6', borderRadius: 5,
-          boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 200,
-          minHeight: Math.min(filtered.length, 4) * 44,
-          maxHeight: 240, overflowY: 'auto', marginTop: 2,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 9999,
+          maxHeight: 240, overflowY: 'auto',
         }}>
           {filtered.map(item => (
             <div
@@ -81,7 +89,8 @@ export function CatalogoSearchInput({
               )}
             </div>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )

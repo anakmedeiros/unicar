@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { jsPDF } from 'jspdf'
@@ -11,6 +12,8 @@ import { Field, Input, Select, Textarea } from '../components/ui/Field'
 import { ordensServicoService } from '../services/ordens-servico'
 import { catalogoService } from '../services/catalogo'
 import { clientesService } from '../services/clientes'
+import { supabase } from '../lib/supabase'
+import { ClienteEditModal } from '../components/ClienteEditModal'
 import { CatalogoSearchInput } from '../shared/components/CatalogoSearchInput'
 import { ToastNotification } from '../shared/components/Toast'
 import type { ToastItem } from '../shared/components/Toast'
@@ -295,33 +298,74 @@ function StatusBadge({ status }: { status: OrdemServicoStatus }) {
 
 // ─── Cliente search dropdown ──────────────────────────────────────────────────
 
-interface ClienteSearchProps {
-  value: string
-  clientes: Cliente[]
-  onSelect: (c: Cliente) => void
-  error?: boolean
-  onCadastrarRapido?: (nome: string) => void
+interface ClienteResult {
+  id: string
+  nome: string
+  documento: string
+  telefone?: string
+  tipo: string
+  rua?: string
+  bairro?: string
+  cidade?: string
+  estado?: string
 }
 
-function ClienteSearch({ value, clientes, onSelect, error, onCadastrarRapido }: ClienteSearchProps) {
+interface ClienteSearchProps {
+  value: string
+  onSelect: (c: ClienteResult) => void
+  onEditRequest?: (c: ClienteResult) => void
+}
+
+function ClienteSearch({ value, onSelect, onEditRequest }: ClienteSearchProps) {
   const [search, setSearch] = useState(value)
-  const [open, setOpen] = useState(false)
+  const [results,   setResults]   = useState<ClienteResult[]>([])
+  const [loading,   setLoading]   = useState(false)
+  const [open,      setOpen]      = useState(false)
+  const [hoveredId, setHoveredId] = useState<string | null>(null)
+  const [dropPos, setDropPos] = useState<{ top: number; left: number; width: number } | null>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { setSearch(value) }, [value])
 
-  const filtered = useMemo(() =>
-    search
-      ? clientes
-          .filter(c =>
-            c.nome.toLowerCase().includes(search.toLowerCase()) ||
-            c.documento.includes(search.replace(/\D/g, ''))
-          )
-          .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
-          .slice(0, 8)
-      : [],
-    [clientes, search]
-  )
+  async function buscarTodos() {
+    setLoading(true)
+    const { data } = await supabase
+      .from('clientes')
+      .select('id, nome, documento, telefone, tipo, rua, bairro, cidade, estado')
+      .order('nome', { ascending: true })
+      .limit(8)
+    setResults((data ?? []) as ClienteResult[])
+    setLoading(false)
+  }
+
+  async function buscarClientes(termo: string) {
+    setLoading(true)
+    const { data, error } = await supabase
+      .from('clientes')
+      .select('id, nome, documento, telefone, tipo, rua, bairro, cidade, estado')
+      .ilike('nome', `%${termo}%`)
+      .order('nome', { ascending: true })
+      .limit(8)
+    if (error) console.error('Erro ao buscar clientes:', error)
+    setResults((data ?? []) as ClienteResult[])
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    if (!open) return
+    const q = search.trim()
+    const delay = q ? 300 : 0
+    const timer = setTimeout(() => { if (q) buscarClientes(q); else buscarTodos() }, delay)
+    return () => clearTimeout(timer)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, open])
+
+  function openDrop() {
+    if (!wrapRef.current) return
+    const rect = wrapRef.current.getBoundingClientRect()
+    setDropPos({ top: rect.bottom + 2, left: rect.left, width: rect.width })
+    setOpen(true)
+  }
 
   useEffect(() => {
     function handleOut(e: MouseEvent) {
@@ -331,162 +375,63 @@ function ClienteSearch({ value, clientes, onSelect, error, onCadastrarRapido }: 
     return () => document.removeEventListener('mousedown', handleOut)
   }, [])
 
-  const showDropdown = open && search.trim().length > 0 && (filtered.length > 0 || !!onCadastrarRapido)
+  const showEmpty = open && dropPos && !loading && results.length === 0 && !!search.trim()
 
   return (
     <div ref={wrapRef} style={{ position: 'relative' }}>
       <input
         value={search}
-        onChange={e => { setSearch(e.target.value); setOpen(true) }}
+        onChange={e => { setSearch(e.target.value); openDrop() }}
         placeholder="Buscar cliente…"
-        style={{ width: '100%', border: `1px solid ${error ? '#E31E2D' : '#CFCCC6'}`, borderRadius: 5, padding: '8px 10px', fontSize: 12.5, color: '#1A1A1A', outline: 'none', background: '#fff', fontFamily: 'inherit', boxShadow: error ? '0 0 0 3px rgba(227,30,45,0.08)' : 'none' }}
-        onFocus={e => { e.currentTarget.style.borderColor = '#E31E2D'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(227,30,45,0.08)'; setOpen(true) }}
-        onBlur={e => { e.currentTarget.style.borderColor = error ? '#E31E2D' : '#CFCCC6'; e.currentTarget.style.boxShadow = error ? '0 0 0 3px rgba(227,30,45,0.08)' : 'none' }}
+        style={{ width: '100%', border: '1px solid #CFCCC6', borderRadius: 5, padding: '8px 10px', fontSize: 12.5, color: '#1A1A1A', outline: 'none', background: '#fff', fontFamily: 'inherit' }}
+        onFocus={e => { e.currentTarget.style.borderColor = '#E31E2D'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(227,30,45,0.08)'; openDrop() }}
+        onBlur={e => { e.currentTarget.style.borderColor = '#CFCCC6'; e.currentTarget.style.boxShadow = 'none' }}
       />
-      {showDropdown && (
-        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #CFCCC6', borderRadius: 5, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 200, maxHeight: 220, overflowY: 'auto', marginTop: 2 }}>
-          {filtered.length === 0 && (
-            <div style={{ padding: '8px 12px', fontSize: 12, color: '#8A8A8A', fontStyle: 'italic' }}>
-              Nenhum cliente encontrado
-            </div>
-          )}
-          {filtered.map(c => (
+      {open && dropPos && (results.length > 0 || showEmpty) && createPortal(
+        <div style={{ position: 'fixed', top: dropPos.top, left: dropPos.left, width: dropPos.width, background: '#fff', border: '1px solid #CFCCC6', borderRadius: 5, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 9999, maxHeight: 220, overflowY: 'auto' }}>
+          {results.map(c => (
             <div
               key={c.id}
               onMouseDown={e => { e.preventDefault(); onSelect(c); setSearch(c.nome); setOpen(false) }}
-              style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #F4F2ED' }}
-              onMouseEnter={e => (e.currentTarget.style.background = '#F4F2ED')}
-              onMouseLeave={e => (e.currentTarget.style.background = '#fff')}
+              style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #F4F2ED', minHeight: 44, boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 4 }}
+              onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = '#F4F2ED'; setHoveredId(c.id) }}
+              onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = '#fff'; setHoveredId(null) }}
             >
-              <div style={{ fontSize: 12, fontWeight: 600, color: '#1A1A1A' }}>{c.nome}</div>
-              <div style={{ fontSize: 10.5, color: '#8A8A8A', fontFamily: "'JetBrains Mono', monospace", marginTop: 1 }}>
-                {c.documento ? formatDoc(c.documento) + ' · ' : ''}{c.veiculos.length} veículo{c.veiculos.length !== 1 ? 's' : ''}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#1A1A1A' }}>{c.nome}</div>
+                {c.documento && (
+                  <div style={{ fontSize: 10.5, color: '#8A8A8A', fontFamily: "'JetBrains Mono', monospace", marginTop: 1 }}>
+                    {formatDoc(c.documento)}
+                  </div>
+                )}
               </div>
+              {onEditRequest && hoveredId === c.id && (
+                <button
+                  onMouseDown={e => { e.stopPropagation(); e.preventDefault(); onEditRequest(c); setOpen(false) }}
+                  title="Editar cliente"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', color: '#9ca3af', display: 'grid', placeItems: 'center', borderRadius: 4, flexShrink: 0 }}
+                  onMouseEnter={e => (e.currentTarget.style.color = '#E31E2D')}
+                  onMouseLeave={e => (e.currentTarget.style.color = '#9ca3af')}
+                >
+                  <Icon name="edit" size={14} />
+                </button>
+              )}
             </div>
           ))}
-          {onCadastrarRapido && filtered.length === 0 && (
+          {showEmpty && (
             <div
-              onMouseDown={e => { e.preventDefault(); onCadastrarRapido(search.trim()); setOpen(false) }}
-              style={{ padding: '8px 12px', cursor: 'pointer', fontSize: 12, color: '#E31E2D', display: 'flex', alignItems: 'center', gap: 6, borderTop: filtered.length > 0 ? '1px solid #EBE8E2' : 'none' }}
-              onMouseEnter={e => (e.currentTarget.style.background = '#FEF2F2')}
+              onMouseDown={e => { e.preventDefault(); setOpen(false) }}
+              style={{ padding: '10px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, color: '#E31E2D', fontSize: 12, fontWeight: 600 }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#FFF5F5')}
               onMouseLeave={e => (e.currentTarget.style.background = '#fff')}
             >
-              <span style={{ fontWeight: 700, fontSize: 14, lineHeight: 1 }}>+</span>
-              Cadastrar "{search.trim()}" rapidamente
+              <span style={{ fontSize: 16, fontWeight: 700 }}>+</span>
+              Cadastrar "{search}"
             </div>
           )}
-        </div>
+        </div>,
+        document.body
       )}
-    </div>
-  )
-}
-
-// ─── Modal cadastro rápido de cliente ────────────────────────────────────────
-
-function ModalCadastroRapidoCliente({
-  open, nomeInicial, onClose, onSaved,
-}: { open: boolean; nomeInicial: string; onClose: () => void; onSaved: (c: Cliente) => void }) {
-  const qc = useQueryClient()
-  const [nome, setNome] = useState('')
-  const [cep, setCep] = useState('')
-  const [cidade, setCidade] = useState('')
-  const [estado, setEstado] = useState('')
-  const [telefone, setTelefone] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [cepLoading, setCepLoading] = useState(false)
-  const [errs, setErrs] = useState<Record<string, string>>({})
-
-  useEffect(() => {
-    if (!open) return
-    setNome(nomeInicial); setCep(''); setCidade(''); setEstado(''); setTelefone(''); setErrs({}); setSaving(false)
-  }, [open, nomeInicial])
-
-  async function handleCepChange(v: string) {
-    const clean = v.replace(/\D/g, '').slice(0, 8)
-    setCep(clean.length > 5 ? `${clean.slice(0, 5)}-${clean.slice(5)}` : clean)
-    if (clean.length === 8) {
-      setCepLoading(true)
-      try {
-        const res = await fetch(`https://viacep.com.br/ws/${clean}/json/`)
-        const d = await res.json()
-        if (!d.erro) { setCidade(d.localidade ?? ''); setEstado(d.uf ?? '') }
-      } catch { /* silent */ }
-      setCepLoading(false)
-    }
-  }
-
-  async function handleSave() {
-    const e: Record<string, string> = {}
-    if (!nome.trim()) e.nome = 'Informe o nome'
-    if (cep.replace(/\D/g, '').length < 8) e.cep = 'CEP inválido'
-    if (Object.keys(e).length) { setErrs(e); return }
-    setSaving(true)
-    try {
-      const c = await clientesService.create({
-        tipo: 'PF', nome: nome.trim(), documento: '', telefone: telefone.replace(/\D/g, ''),
-        cep: cep.replace(/\D/g, ''), cidade, estado, veiculos: [],
-      })
-      qc.invalidateQueries({ queryKey: ['clientes'] })
-      onSaved(c)
-    } catch (err) {
-      setErrs({ save: (err as { message?: string }).message ?? 'Erro ao cadastrar' })
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  if (!open) return null
-
-  const inp: React.CSSProperties = {
-    width: '100%', border: '1px solid #CFCCC6', borderRadius: 5,
-    padding: '8px 10px', fontSize: 12.5, color: '#1A1A1A',
-    outline: 'none', background: '#fff', fontFamily: 'inherit', boxSizing: 'border-box',
-  }
-
-  return (
-    <div
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}
-    >
-      <div style={{ background: '#fff', borderRadius: 8, width: 400, maxWidth: '100%', boxShadow: '0 16px 48px rgba(0,0,0,0.25)' }}>
-        <div style={{ padding: '14px 20px', borderBottom: '1px solid #EBE8E2', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: '#1A1A1A' }}>Cadastro rápido de cliente</div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8A8A8A', padding: 4, display: 'grid', placeItems: 'center' }}>
-            <Icon name="x" size={14} />
-          </button>
-        </div>
-        <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-            <label style={{ fontSize: 11, fontWeight: 600, color: '#4A4A4A' }}>Nome *</label>
-            <input value={nome} onChange={e => setNome(e.target.value)} style={{ ...inp, borderColor: errs.nome ? '#E31E2D' : '#CFCCC6' }} />
-            {errs.nome && <span style={{ fontSize: 10.5, color: '#E31E2D' }}>{errs.nome}</span>}
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-            <label style={{ fontSize: 11, fontWeight: 600, color: '#4A4A4A' }}>CEP *</label>
-            <div style={{ position: 'relative' }}>
-              <input
-                value={cep} onChange={e => handleCepChange(e.target.value)}
-                placeholder="00000-000"
-                style={{ ...inp, borderColor: errs.cep ? '#E31E2D' : '#CFCCC6' }}
-              />
-              {cepLoading && <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 10.5, color: '#8A8A8A', pointerEvents: 'none' }}>buscando…</span>}
-            </div>
-            {errs.cep && <span style={{ fontSize: 10.5, color: '#E31E2D' }}>{errs.cep}</span>}
-            {cidade && !errs.cep && <span style={{ fontSize: 11, color: '#4A4A4A' }}>{cidade} — {estado}</span>}
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-            <label style={{ fontSize: 11, fontWeight: 600, color: '#4A4A4A' }}>Telefone</label>
-            <input value={telefone} onChange={e => setTelefone(formatPhone(e.target.value))} placeholder="(00) 00000-0000" style={inp} />
-          </div>
-          {errs.save && <span style={{ fontSize: 11.5, color: '#E31E2D' }}>{errs.save}</span>}
-        </div>
-        <div style={{ padding: '12px 20px', borderTop: '1px solid #EBE8E2', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-          <Button variant="secondary" size="sm" onClick={onClose} disabled={saving}>Cancelar</Button>
-          <Button variant="primary" size="sm" onClick={handleSave} disabled={saving}>
-            {saving ? 'Cadastrando...' : 'Cadastrar'}
-          </Button>
-        </div>
-      </div>
     </div>
   )
 }
@@ -812,6 +757,7 @@ function AuxiliaresSelect({ tecnicos, selected, excludeId, onChange }: Auxiliare
   )
 }
 
+
 // ─── OS Modal ─────────────────────────────────────────────────────────────────
 
 interface OSModalProps {
@@ -825,7 +771,6 @@ interface OSModalProps {
   catalogoServicos: CatalogoItem[]
   catalogoPecas: CatalogoItem[]
   historico: { id: string; numero: string; data: string; tipoServico: string }[]
-  errors: Partial<Record<string, string>>
   onFormChange: (patch: Partial<OSFormData>) => void
   onClose: () => void
   onSaveDraft: () => void
@@ -833,17 +778,19 @@ interface OSModalProps {
   onIniciarOS: () => void
   readOnly?: boolean
   statusHistory?: { id: string; statusAnterior: string | null; statusNovo: string; createdAt: string }[]
+  onToast?: (msg: string, variant?: 'success' | 'error') => void
 }
 
 function OSModal({
   open, mode, form, lastSaved, isSaving,
   clientes, tecnicos, catalogoServicos, catalogoPecas, historico,
-  errors, onFormChange, onClose, onSaveDraft, onGerarOrcamento, onIniciarOS,
-  readOnly = false, statusHistory = [],
+  onFormChange, onClose, onSaveDraft, onGerarOrcamento, onIniciarOS,
+  readOnly = false, statusHistory = [], onToast,
 }: OSModalProps) {
+  const qc = useQueryClient()
   const [saveText, setSaveText] = useState('')
-  const [cadRapidoOpen, setCadRapidoOpen] = useState(false)
-  const [cadRapidoNome, setCadRapidoNome] = useState('')
+  const [editingCliente, setEditingCliente] = useState<ClienteResult | null>(null)
+  const veiculoWrapRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!lastSaved) return
@@ -886,10 +833,22 @@ function OSModal({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [totalGeral])
 
-  // Client vehicles (derived from selected client)
-  const clienteVeiculos = useMemo(() => {
-    return clientes.find(c => c.id === form.clienteId)?.veiculos ?? []
-  }, [clientes, form.clienteId])
+  // Client vehicles (direct query — independent of the clientes list cache)
+  const { data: clienteVeiculos = [] } = useQuery({
+    queryKey: ['veiculos-cliente', form.clienteId],
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    queryFn: async (): Promise<{ id: string; placa: string; modelo: string; ano: string; km: string }[]> => {
+      if (!form.clienteId) return []
+      const { data } = await supabase
+        .from('veiculos')
+        .select('id, placa, modelo, ano, km')
+        .eq('cliente_id', form.clienteId)
+        .order('placa')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (data ?? []).map((v: any) => ({ id: v.id, placa: v.placa, modelo: v.modelo, ano: v.ano ?? '', km: v.km ?? '' }))
+    },
+    enabled: !!form.clienteId,
+  })
 
   const subtitle = readOnly
     ? STATUS_LABEL[form.status]
@@ -1015,7 +974,7 @@ function OSModal({
                         style={{ background: '#FAF9F7', color: '#6A6864' }}
                       />
                     </Field>
-                    <Field label="Data" required>
+                    <Field label="Data">
                       <Input
                         type="date"
                         value={form.data}
@@ -1035,11 +994,9 @@ function OSModal({
                   </div>
 
                   {/* Row 2: Cliente */}
-                  <Field label="Cliente" required error={errors.clienteId}>
+                  <Field label="Cliente">
                     <ClienteSearch
                       value={form.clienteNome}
-                      clientes={clientes}
-                      error={!!errors.clienteId}
                       onSelect={c => {
                         const endereco = [c.rua, c.bairro, c.cidade, c.estado].filter(Boolean).join(', ')
                         onFormChange({
@@ -1049,36 +1006,37 @@ function OSModal({
                           clienteEndereco:  endereco,
                           veiculoId: '',
                         })
+                        setTimeout(() => veiculoWrapRef.current?.querySelector('select')?.focus(), 100)
                       }}
-                      onCadastrarRapido={nome => { setCadRapidoNome(nome); setCadRapidoOpen(true) }}
+                      onEditRequest={c => setEditingCliente(c)}
                     />
                   </Field>
 
                   {/* Row 3: Veículo / Km / Tipo serviço / Prazo */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px 1fr 130px', gap: 12 }}>
-                    <Field label="Veículo / Placa" error={errors.veiculoId}>
-                      <Select
-                        value={form.veiculoId}
-                        onChange={e => onFormChange({ veiculoId: e.target.value })}
-                        placeholder="Selecionar veículo"
-                        error={!!errors.veiculoId}
-                        disabled={!form.clienteId}
-                      >
-                        {clienteVeiculos.map(v => (
-                          <option key={v.id} value={v.id}>
-                            {displayPlate(v.placa)} · {v.modelo}{v.ano ? ` · ${v.ano}` : ''}
-                          </option>
-                        ))}
-                      </Select>
+                    <Field label="Veículo / Placa">
+                      <div ref={veiculoWrapRef}>
+                        <Select
+                          value={form.veiculoId}
+                          onChange={e => onFormChange({ veiculoId: e.target.value })}
+                          placeholder="Selecionar veículo"
+                          disabled={!form.clienteId}
+                        >
+                          {clienteVeiculos.map(v => (
+                            <option key={v.id} value={v.id}>
+                              {displayPlate(v.placa)} · {v.modelo}{v.ano ? ` · ${v.ano}` : ''}
+                            </option>
+                          ))}
+                        </Select>
+                      </div>
                     </Field>
-                    <Field label="Km atual" error={errors.kmAtual}>
+                    <Field label="Km atual">
                       <div style={{ position: 'relative' }}>
                         <Input
                           value={form.kmAtual}
                           onChange={e => onFormChange({ kmAtual: e.target.value.replace(/\D/g, '') })}
                           placeholder="0"
                           mono
-                          error={!!errors.kmAtual}
                           style={{ paddingRight: 28 }}
                         />
                         <span style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 10.5, color: '#8A8A8A', pointerEvents: 'none' }}>km</span>
@@ -1391,22 +1349,23 @@ function OSModal({
         }
       `}</style>
 
-      <ModalCadastroRapidoCliente
-        open={cadRapidoOpen}
-        nomeInicial={cadRapidoNome}
-        onClose={() => setCadRapidoOpen(false)}
-        onSaved={c => {
-          const endereco = [c.rua, c.bairro, c.cidade, c.estado].filter(Boolean).join(', ')
-          onFormChange({
-            clienteId:        c.id,
-            clienteNome:      c.nome,
-            clienteDocumento: c.documento,
-            clienteEndereco:  endereco,
-            veiculoId: '',
-          })
-          setCadRapidoOpen(false)
-        }}
-      />
+      {editingCliente && (
+        <ClienteEditModal
+          clienteId={editingCliente.id}
+          onClose={() => setEditingCliente(null)}
+          onSaved={updated => {
+            setEditingCliente(null)
+            qc.invalidateQueries({ queryKey: ['clientes'] })
+            qc.invalidateQueries({ queryKey: ['veiculos-cliente', updated.id] })
+            if (form.clienteId === updated.id) {
+              const endereco = [updated.rua, updated.bairro, updated.cidade, updated.estado].filter(Boolean).join(', ')
+              onFormChange({ clienteNome: updated.nome, clienteDocumento: updated.documento, clienteEndereco: endereco })
+            }
+            onToast?.('Cliente atualizado')
+          }}
+        />
+      )}
+
     </>
   )
 }
@@ -1421,7 +1380,6 @@ export function OrdensServicoPage() {
   const [modalMode, setModalMode] = useState<'new' | 'edit'>('new')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<OSFormData>(EMPTY_FORM)
-  const [errors, setErrors] = useState<Partial<Record<string, string>>>({})
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const [toasts, setToasts] = useState<ToastItem[]>([])
   const [rowMenu, setRowMenu] = useState<string | null>(null)
@@ -1584,7 +1542,6 @@ export function OrdensServicoPage() {
 
   function openNew() {
     setForm({ ...EMPTY_FORM, data: today() })
-    setErrors({})
     setEditingId(null)
     setLastSaved(null)
     setModalMode('new')
@@ -1594,7 +1551,6 @@ export function OrdensServicoPage() {
   async function openEdit(row: OrdemServicoRow) {
     setModalMode('edit')
     setEditingId(row.id)
-    setErrors({})
     setLastSaved(null)
     setModalOpen(true)
     try {
@@ -1826,12 +1782,6 @@ export function OrdensServicoPage() {
   // ─── Iniciar OS ───────────────────────────────────────────────────────────
 
   async function handleIniciarOS() {
-    const errs: Partial<Record<string, string>> = {}
-    if (!form.clienteId) errs.clienteId = 'Selecione um cliente'
-    if (!form.veiculoId) errs.veiculoId = 'Selecione um veículo'
-    if (!form.kmAtual)   errs.kmAtual   = 'Informe o Km atual'
-    if (Object.keys(errs).length) { setErrors(errs); return }
-
     const payload = formToPayload(form, editingId ?? undefined)
     try {
       const prevStatus = editingId ? form.status : null
@@ -2101,12 +2051,12 @@ export function OrdensServicoPage() {
         catalogoServicos={catalogoServicos}
         catalogoPecas={catalogoPecas}
         historico={historico}
-        errors={errors}
         onFormChange={patchForm}
         onClose={() => setModalOpen(false)}
         onSaveDraft={handleSaveDraft}
         onGerarOrcamento={handleGerarOrcamento}
         onIniciarOS={handleIniciarOS}
+        onToast={showToast}
       />
 
       {/* Liberar Veículo confirmation modal */}
