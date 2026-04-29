@@ -785,7 +785,7 @@ function OSModal({
   open, mode, form, lastSaved, isSaving,
   clientes, tecnicos, catalogoServicos, catalogoPecas, historico,
   onFormChange, onClose, onSaveDraft, onGerarOrcamento, onIniciarOS,
-  readOnly = false, statusHistory = [], onToast,
+  readOnly = false, statusHistory: _statusHistory = [], onToast,
 }: OSModalProps) {
   const qc = useQueryClient()
   const [saveText, setSaveText] = useState('')

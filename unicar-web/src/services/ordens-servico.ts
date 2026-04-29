@@ -2,6 +2,7 @@ import { supabase } from '../lib/supabase'
 import type {
   OrdemServico,
   OrdemServicoRow,
+  OrdemServicoStatus,
   KanbanOS,
   OSItem,
   OSParcela,

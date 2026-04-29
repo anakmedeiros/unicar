@@ -1084,7 +1084,7 @@ export function ClientesPage() {
 
   // ─── Drawer helpers ───────────────────────────────────────────────────────────
 
-  function openNew() {
+  function _openNew() {
     setForm(EMPTY_FORM)
     setErrors({})
     setNewVehicle({ placa: '', modelo: '', ano: '', km: '' })
