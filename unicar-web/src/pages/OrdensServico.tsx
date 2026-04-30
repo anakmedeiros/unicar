@@ -324,6 +324,7 @@ function ClienteSearch({ value, onSelect, onEditRequest }: ClienteSearchProps) {
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   const [dropPos, setDropPos] = useState<{ top: number; left: number; width: number } | null>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
+  const dropRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => { setSearch(value) }, [value])
 
@@ -369,7 +370,10 @@ function ClienteSearch({ value, onSelect, onEditRequest }: ClienteSearchProps) {
 
   useEffect(() => {
     function handleOut(e: MouseEvent) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false)
+      const t = e.target as Node
+      if (wrapRef.current?.contains(t)) return
+      if (dropRef.current?.contains(t)) return
+      setOpen(false)
     }
     document.addEventListener('mousedown', handleOut)
     return () => document.removeEventListener('mousedown', handleOut)
@@ -388,7 +392,7 @@ function ClienteSearch({ value, onSelect, onEditRequest }: ClienteSearchProps) {
         onBlur={e => { e.currentTarget.style.borderColor = '#CFCCC6'; e.currentTarget.style.boxShadow = 'none' }}
       />
       {open && dropPos && (results.length > 0 || showEmpty) && createPortal(
-        <div style={{ position: 'fixed', top: dropPos.top, left: dropPos.left, width: dropPos.width, background: '#fff', border: '1px solid #CFCCC6', borderRadius: 5, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 9999, maxHeight: 220, overflowY: 'auto' }}>
+        <div ref={dropRef} style={{ position: 'fixed', top: dropPos.top, left: dropPos.left, width: dropPos.width, background: '#fff', border: '1px solid #CFCCC6', borderRadius: 5, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 9999, maxHeight: 220, overflowY: 'auto' }}>
           {results.map(c => (
             <div
               key={c.id}
