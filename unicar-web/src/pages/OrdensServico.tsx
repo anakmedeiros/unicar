@@ -392,12 +392,13 @@ function ClienteSearch({ value, onSelect, onEditRequest }: ClienteSearchProps) {
           {results.map(c => (
             <div
               key={c.id}
-              onMouseDown={e => { e.preventDefault(); onSelect(c); setSearch(c.nome); setOpen(false) }}
-              style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #F4F2ED', minHeight: 44, boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 4 }}
+              onMouseDown={e => e.preventDefault()}
+              onClick={() => { onSelect(c); setSearch(c.nome); setOpen(false) }}
+              style={{ borderBottom: '1px solid #F4F2ED', minHeight: 44, boxSizing: 'border-box', display: 'flex', alignItems: 'center', cursor: 'pointer' }}
               onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = '#F4F2ED'; setHoveredId(c.id) }}
               onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = '#fff'; setHoveredId(null) }}
             >
-              <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ flex: 1, minWidth: 0, padding: '8px 12px' }}>
                 <div style={{ fontSize: 12, fontWeight: 600, color: '#1A1A1A' }}>{c.nome}</div>
                 {c.documento && (
                   <div style={{ fontSize: 10.5, color: '#8A8A8A', fontFamily: "'JetBrains Mono', monospace", marginTop: 1 }}>
@@ -405,13 +406,20 @@ function ClienteSearch({ value, onSelect, onEditRequest }: ClienteSearchProps) {
                   </div>
                 )}
               </div>
-              {onEditRequest && hoveredId === c.id && (
+              {onEditRequest && (
                 <button
-                  onMouseDown={e => { e.stopPropagation(); e.preventDefault(); onEditRequest(c); setOpen(false) }}
+                  onMouseDown={e => { e.preventDefault(); e.stopPropagation() }}
+                  onClick={e => { e.stopPropagation(); onEditRequest(c); setOpen(false) }}
                   title="Editar cliente"
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', color: '#9ca3af', display: 'grid', placeItems: 'center', borderRadius: 4, flexShrink: 0 }}
+                  style={{
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    padding: '8px 10px', flexShrink: 0,
+                    color: hoveredId === c.id ? '#9ca3af' : 'transparent',
+                    display: 'grid', placeItems: 'center', borderRadius: 4,
+                    transition: 'color 0.1s',
+                  }}
                   onMouseEnter={e => (e.currentTarget.style.color = '#E31E2D')}
-                  onMouseLeave={e => (e.currentTarget.style.color = '#9ca3af')}
+                  onMouseLeave={e => (e.currentTarget.style.color = hoveredId === c.id ? '#9ca3af' : 'transparent')}
                 >
                   <Icon name="edit" size={14} />
                 </button>
