@@ -331,10 +331,18 @@ export function Dashboard() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('os_parcelas')
-        .select('valor, data_vencimento, status')
+        .select('valor, data_vencimento, status, os_pagamentos(ordens_servico(status))')
         .in('status', ['pendente', 'atrasado'])
       if (error) throw error
-      return (data ?? []) as { valor: number; data_vencimento: string; status: string }[]
+      return (data ?? [])
+        .filter(row => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const pag = Array.isArray((row as any).os_pagamentos) ? (row as any).os_pagamentos[0] : (row as any).os_pagamentos
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const os = pag ? (Array.isArray(pag.ordens_servico) ? pag.ordens_servico[0] : pag.ordens_servico) : null
+          return os?.status !== 'cancelada'
+        })
+        .map(({ valor, data_vencimento, status }) => ({ valor, data_vencimento, status })) as { valor: number; data_vencimento: string; status: string }[]
     },
   })
 
