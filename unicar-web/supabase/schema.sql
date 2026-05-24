@@ -186,7 +186,7 @@ CREATE TABLE IF NOT EXISTS os_historico (
 
 CREATE TABLE IF NOT EXISTS agendamentos (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tipo        TEXT NOT NULL CHECK (tipo IN ('agendamento', 'lembrete')),
+  tipo        TEXT NOT NULL CHECK (tipo IN ('agendamento', 'lembrete', 'pagamento')),
   titulo      TEXT NOT NULL,
   descricao   TEXT,
   data        DATE NOT NULL,
