@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../../lib/supabase'
-import type { Agendamento, AgendamentoForm } from '../types'
+import type { Agendamento, AgendamentoForm, ParcelaCalendario } from '../types'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapRow(row: any): Agendamento {
@@ -22,6 +22,7 @@ function mapRow(row: any): Agendamento {
     tecnico_id: row.tecnico_id ?? null,
     tecnico_nome: tecnico?.nome ?? undefined,
     cor: row.cor ?? '#dc2626',
+    valor: row.valor ?? null,
     criado_em: row.criado_em ?? '',
   }
 }
@@ -39,7 +40,7 @@ export function useAgendamentos(ano: number, mes: number) {
         .from('agendamentos')
         .select(`
           id, tipo, titulo, descricao, data, hora_inicio, hora_fim,
-          dia_inteiro, cliente_id, os_id, tecnico_id, cor, criado_em,
+          dia_inteiro, cliente_id, os_id, tecnico_id, cor, valor, criado_em,
           clientes (nome),
           tecnicos (nome)
         `)
@@ -81,6 +82,7 @@ export function useCreateAgendamento() {
         os_id: form.os_id || null,
         tecnico_id: form.tecnico_id || null,
         cor: form.cor,
+        valor: form.valor ? parseFloat(form.valor.replace(',', '.')) : null,
       }
       const { error } = await supabase.from('agendamentos').insert(payload)
       if (error) throw error
@@ -105,11 +107,55 @@ export function useUpdateAgendamento() {
         os_id: form.os_id || null,
         tecnico_id: form.tecnico_id || null,
         cor: form.cor,
+        valor: form.valor ? parseFloat(form.valor.replace(',', '.')) : null,
       }
       const { error } = await supabase.from('agendamentos').update(payload).eq('id', id)
       if (error) throw error
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['agendamentos'] }),
+  })
+}
+
+export function useParcelasCalendario(ano: number, mes: number) {
+  const firstDay = `${ano}-${String(mes).padStart(2, '0')}-01`
+  const lastDay = new Date(ano, mes, 0).toISOString().slice(0, 10)
+
+  return useQuery({
+    queryKey: ['parcelas-calendario', ano, mes],
+    queryFn: async (): Promise<ParcelaCalendario[]> => {
+      const today = new Date().toISOString().slice(0, 10)
+      const { data, error } = await supabase
+        .from('os_parcelas')
+        .select(`
+          id, data_vencimento, valor, status,
+          os_pagamentos (
+            ordens_servico (
+              numero, status,
+              clientes (nome)
+            )
+          )
+        `)
+        .gte('data_vencimento', firstDay)
+        .lte('data_vencimento', lastDay)
+        .in('status', ['pendente', 'atrasado'])
+      if (error) throw error
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (data ?? []).map((row: any) => {
+        const pag = Array.isArray(row.os_pagamentos) ? row.os_pagamentos[0] : row.os_pagamentos
+        const os  = pag ? (Array.isArray(pag.ordens_servico) ? pag.ordens_servico[0] : pag.ordens_servico) : null
+        const cli = os  ? (Array.isArray(os.clientes) ? os.clientes[0] : os.clientes) : null
+        return {
+          id: row.id,
+          data_vencimento: row.data_vencimento ?? '',
+          valor: row.valor ?? 0,
+          os_numero: os?.numero ?? '—',
+          cliente_nome: cli?.nome ?? '—',
+          os_status: os?.status ?? 'aberta',
+          status: (row.data_vencimento ?? '') < today ? 'atrasado' : 'pendente',
+        }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      }).filter((p: any) => p.os_status !== 'cancelada') as ParcelaCalendario[]
+    },
   })
 }
 

@@ -1,20 +1,23 @@
 import { useState, useRef, useEffect } from 'react'
 import { Topbar } from '../components/layout/Topbar'
 import { Icon } from '../components/ui/Icon'
+import { Button } from '../components/ui/Button'
 import { ToastNotification } from '../shared/components/Toast'
 import type { ToastItem } from '../shared/components/Toast'
 import { CalendarioMensal } from '../modules/agendamentos/components/CalendarioMensal'
 import { ModalNovoAgendamento } from '../modules/agendamentos/components/ModalNovoAgendamento'
 import { ModalNovoLembrete } from '../modules/agendamentos/components/ModalNovoLembrete'
+import { ModalNovoPagamento } from '../modules/agendamentos/components/ModalNovoPagamento'
 import {
   useAgendamentos,
   useCreateAgendamento,
   useUpdateAgendamento,
   useDeleteAgendamento,
+  useParcelasCalendario,
 } from '../modules/agendamentos/hooks/useAgendamentos'
-import type { Agendamento } from '../modules/agendamentos/types'
+import type { Agendamento, ParcelaCalendario } from '../modules/agendamentos/types'
 
-type ModalTipo = 'agendamento' | 'lembrete' | null
+type ModalTipo = 'agendamento' | 'lembrete' | 'pagamento' | null
 
 function formatEventDate(data: string, horaInicio: string | null, horaFim: string | null, diaInteiro: boolean): string {
   const [y, m, d] = data.split('-')
@@ -45,6 +48,11 @@ export function AgendamentosPage() {
   const detailRef = useRef<HTMLDivElement>(null)
   const [deleteConfirm, setDeleteConfirm] = useState(false)
 
+  // Parcela detail popover
+  const [detailParcela, setDetailParcela] = useState<ParcelaCalendario | null>(null)
+  const [detailParcelaPos, setDetailParcelaPos] = useState<{ top: number; left: number } | null>(null)
+  const detailParcelaRef = useRef<HTMLDivElement>(null)
+
   const [toasts, setToasts] = useState<ToastItem[]>([])
 
   function showToast(message: string, variant: 'success' | 'error' = 'success') {
@@ -55,6 +63,7 @@ export function AgendamentosPage() {
   }
 
   const { data: eventos = [] } = useAgendamentos(calAno, calMes)
+  const { data: parcelasReceber = [] } = useParcelasCalendario(calAno, calMes)
   const createMutation = useCreateAgendamento()
   const updateMutation = useUpdateAgendamento()
   const deleteMutation = useDeleteAgendamento()
@@ -75,6 +84,17 @@ export function AgendamentosPage() {
     function handle(e: MouseEvent) {
       if (detailRef.current && !detailRef.current.contains(e.target as Node)) {
         setDetailEvento(null); setDetailPos(null); setDeleteConfirm(false)
+      }
+    }
+    document.addEventListener('mousedown', handle)
+    return () => document.removeEventListener('mousedown', handle)
+  }, [])
+
+  // Close parcela detail on outside click
+  useEffect(() => {
+    function handle(e: MouseEvent) {
+      if (detailParcelaRef.current && !detailParcelaRef.current.contains(e.target as Node)) {
+        setDetailParcela(null); setDetailParcelaPos(null)
       }
     }
     document.addEventListener('mousedown', handle)
@@ -103,11 +123,20 @@ export function AgendamentosPage() {
     setModalTipo(tipo)
   }
 
+  function handleParcelaClick(parcela: ParcelaCalendario, e: React.MouseEvent) {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    const left = Math.min(rect.left, window.innerWidth - 260)
+    const top = rect.bottom + 6
+    setDetailParcela(parcela)
+    setDetailParcelaPos({ top, left })
+    setDetailEvento(null)
+  }
+
   async function handleCreate(form: Parameters<typeof createMutation.mutateAsync>[0]) {
     try {
       await createMutation.mutateAsync(form)
       setModalTipo(null)
-      showToast(form.tipo === 'lembrete' ? 'Lembrete criado' : 'Agendamento criado')
+      showToast(form.tipo === 'lembrete' ? 'Lembrete criado' : form.tipo === 'pagamento' ? 'Pagamento agendado' : 'Agendamento criado')
     } catch (err) {
       const msg = (err as { message?: string })?.message ?? 'Erro desconhecido'
       showToast(`Erro ao criar evento: ${msg}`, 'error')
@@ -154,6 +183,9 @@ export function AgendamentosPage() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: '#1A1A1A' }}>Calendário</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Button variant="secondary" size="sm" onClick={() => openModal('pagamento')}>
+              💸 Novo Pagamento
+            </Button>
             {/* Google Agenda — Em breve */}
             <button
               disabled
@@ -178,9 +210,11 @@ export function AgendamentosPage() {
             ano={calAno}
             mes={calMes}
             eventos={eventos}
+            parcelasReceber={parcelasReceber}
             onMonthChange={(a, m) => { setCalAno(a); setCalMes(m) }}
             onDayClick={handleDayClick}
             onEventClick={handleEventClick}
+            onParcelaClick={handleParcelaClick}
           />
         </div>
       </div>
@@ -216,6 +250,15 @@ export function AgendamentosPage() {
             <span style={{ fontSize: 14 }}>🔔</span>
             <span>Novo Lembrete</span>
           </button>
+          <button
+            onClick={() => openModal('pagamento')}
+            style={choiceItemStyle}
+            onMouseEnter={e => (e.currentTarget.style.background = '#F4F2ED')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+          >
+            <span style={{ fontSize: 14 }}>💸</span>
+            <span>Novo Pagamento</span>
+          </button>
         </div>
       )}
 
@@ -243,6 +286,11 @@ export function AgendamentosPage() {
             {formatEventDate(detailEvento.data, detailEvento.hora_inicio, detailEvento.hora_fim, detailEvento.dia_inteiro)}
           </div>
 
+          {detailEvento.tipo === 'pagamento' && detailEvento.valor != null && (
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#9a3412', marginBottom: 6 }}>
+              R$ {detailEvento.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </div>
+          )}
           {detailEvento.cliente_nome && (
             <div style={{ fontSize: 11.5, color: '#4A4A4A', marginBottom: 4 }}>
               <span style={{ color: '#8A8A8A' }}>Cliente: </span>{detailEvento.cliente_nome}
@@ -283,6 +331,53 @@ export function AgendamentosPage() {
       )}
 
       {/* Modals */}
+      {/* Parcela detail popover */}
+      {detailParcela && detailParcelaPos && (
+        <div
+          ref={detailParcelaRef}
+          style={{
+            position: 'fixed', top: detailParcelaPos.top, left: detailParcelaPos.left, zIndex: 500,
+            background: '#fff', border: '1px solid #E3E0D9', borderRadius: 8,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.14)', padding: 14, minWidth: 240, maxWidth: 280,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8 }}>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 600, color: '#8A8A8A', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 2 }}>
+                A Receber
+              </div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: detailParcela.status === 'atrasado' ? '#b91c1c' : '#15803d' }}>
+                R$ {detailParcela.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              </div>
+            </div>
+            <button onClick={() => { setDetailParcela(null); setDetailParcelaPos(null) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8A8A8A', padding: 2 }}>
+              <Icon name="x" size={12} />
+            </button>
+          </div>
+          <div style={{ fontSize: 11.5, color: '#4A4A4A', marginBottom: 3 }}>
+            <span style={{ color: '#8A8A8A' }}>OS: </span>
+            <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}>{detailParcela.os_numero}</span>
+          </div>
+          <div style={{ fontSize: 11.5, color: '#4A4A4A', marginBottom: 3 }}>
+            <span style={{ color: '#8A8A8A' }}>Cliente: </span>{detailParcela.cliente_nome}
+          </div>
+          <div style={{ fontSize: 11.5, color: '#4A4A4A', marginBottom: 8 }}>
+            <span style={{ color: '#8A8A8A' }}>Vencimento: </span>
+            {new Date(detailParcela.data_vencimento + 'T12:00:00').toLocaleDateString('pt-BR')}
+          </div>
+          <div style={{ display: 'inline-flex' }}>
+            <span style={{
+              padding: '2px 8px', borderRadius: 999, fontSize: 10.5, fontWeight: 600,
+              background: detailParcela.status === 'atrasado' ? 'rgba(220,38,38,0.1)' : 'rgba(22,163,74,0.1)',
+              color: detailParcela.status === 'atrasado' ? '#b91c1c' : '#15803d',
+            }}>
+              {detailParcela.status === 'atrasado' ? 'Atrasado' : 'Pendente'}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Modals */}
       <ModalNovoAgendamento
         open={modalTipo === 'agendamento'}
         dataPrefill={dataPrefill}
@@ -295,6 +390,14 @@ export function AgendamentosPage() {
         open={modalTipo === 'lembrete'}
         dataPrefill={dataPrefill}
         editing={editingEvento?.tipo === 'lembrete' ? editingEvento : null}
+        onClose={() => { setModalTipo(null); setEditingEvento(null) }}
+        onConfirm={editingEvento ? handleUpdate : handleCreate}
+        isSaving={isSaving}
+      />
+      <ModalNovoPagamento
+        open={modalTipo === 'pagamento'}
+        dataPrefill={dataPrefill}
+        editing={editingEvento?.tipo === 'pagamento' ? editingEvento : null}
         onClose={() => { setModalTipo(null); setEditingEvento(null) }}
         onConfirm={editingEvento ? handleUpdate : handleCreate}
         isSaving={isSaving}

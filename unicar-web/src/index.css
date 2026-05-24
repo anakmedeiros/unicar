@@ -60,6 +60,11 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+input:not([type="password"]):not([type="email"]):not([type="number"]):not([type="date"]):not([type="time"]):not([type="datetime-local"]):not([type="month"]):not([type="week"]):not([type="color"]):not([type="file"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="url"]),
+textarea {
+  text-transform: uppercase;
+}
+
 :focus-visible {
   outline: 2px solid #E31E2D;
   outline-offset: 2px;

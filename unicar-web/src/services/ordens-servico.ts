@@ -304,11 +304,12 @@ export const ordensServicoService = {
     return (data ?? []) as CatalogoItem[]
   },
 
-  async inserirHistorico(osId: string, statusAnterior: string | null, statusNovo: string): Promise<void> {
+  async inserirHistorico(osId: string, statusAnterior: string | null, statusNovo: string, motivo?: string): Promise<void> {
     const { error } = await supabase.from('os_historico').insert({
       os_id: osId,
       status_anterior: statusAnterior,
       status_novo: statusNovo,
+      motivo: motivo || null,
     })
     if (error) throw error
   },
@@ -414,6 +415,46 @@ export const ordensServicoService = {
       status_anterior: statusAnterior,
       status_novo: 'aberta',
     })
+  },
+
+  async listLiberados(ano: number, mes: number): Promise<OrdemServicoRow[]> {
+    const first = `${ano}-${String(mes).padStart(2, '0')}-01`
+    const last  = new Date(ano, mes, 0).toISOString().slice(0, 10)
+    const { data, error } = await supabase
+      .from('ordens_servico')
+      .select(`
+        id, numero, status, km_atual, desconto, data, tecnico_id,
+        clientes (nome, documento),
+        veiculos (placa, modelo),
+        tecnicos!tecnico_id (nome),
+        os_itens (qtd, valor_unit)
+      `)
+      .in('status', ['veiculo_liberado', 'entregue'])
+      .gte('data', first)
+      .lte('data', last)
+      .order('data', { ascending: false })
+    if (error) throw error
+    return (data ?? []).map(rowToListItem)
+  },
+
+  async listCanceladas(ano: number, mes: number): Promise<OrdemServicoRow[]> {
+    const first = `${ano}-${String(mes).padStart(2, '0')}-01`
+    const last  = new Date(ano, mes, 0).toISOString().slice(0, 10)
+    const { data, error } = await supabase
+      .from('ordens_servico')
+      .select(`
+        id, numero, status, km_atual, desconto, data, tecnico_id,
+        clientes (nome, documento),
+        veiculos (placa, modelo),
+        tecnicos!tecnico_id (nome),
+        os_itens (qtd, valor_unit)
+      `)
+      .eq('status', 'cancelada')
+      .gte('data', first)
+      .lte('data', last)
+      .order('data', { ascending: false })
+    if (error) throw error
+    return (data ?? []).map(rowToListItem)
   },
 
   async historicoVeiculo(veiculoId: string, excludeId?: string): Promise<{ id: string; numero: string; data: string; tipoServico: string }[]> {

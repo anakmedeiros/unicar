@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Icon } from '../../../components/ui/Icon'
 import { EventoCard } from './EventoCard'
 import { FERIADOS } from '../types'
-import type { Agendamento } from '../types'
+import type { Agendamento, ParcelaCalendario } from '../types'
 
 const DIAS_SEMANA = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB']
 const MES_NOME = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -12,9 +12,11 @@ interface CalendarioMensalProps {
   ano: number
   mes: number // 1-12
   eventos: Agendamento[]
+  parcelasReceber?: ParcelaCalendario[]
   onMonthChange: (ano: number, mes: number) => void
   onDayClick: (date: string) => void
   onEventClick: (evento: Agendamento, e: React.MouseEvent) => void
+  onParcelaClick?: (parcela: ParcelaCalendario, e: React.MouseEvent) => void
 }
 
 interface DayCell {
@@ -62,7 +64,7 @@ function buildCells(ano: number, mes: number): DayCell[] {
 
 const MAX_VISIBLE = 3
 
-export function CalendarioMensal({ ano, mes, eventos, onMonthChange, onDayClick, onEventClick }: CalendarioMensalProps) {
+export function CalendarioMensal({ ano, mes, eventos, parcelasReceber = [], onMonthChange, onDayClick, onEventClick, onParcelaClick }: CalendarioMensalProps) {
   const cells = buildCells(ano, mes)
   const [expandedDay, setExpandedDay] = useState<string | null>(null)
   const expandRef = useRef<HTMLDivElement>(null)
@@ -132,6 +134,8 @@ export function CalendarioMensal({ ano, mes, eventos, onMonthChange, onDayClick,
               const overflow = dayEvents.length - MAX_VISIBLE
               const isExpanded = expandedDay === cell.date
 
+              const dayParcelas = parcelasReceber.filter(p => p.data_vencimento === cell.date)
+
               return (
                 <div
                   key={cell.date}
@@ -190,6 +194,28 @@ export function CalendarioMensal({ ano, mes, eventos, onMonthChange, onDayClick,
                         +{overflow} mais
                       </button>
                     )}
+                    {/* Parcelas a receber */}
+                    {dayParcelas.map(p => (
+                      <div
+                        key={p.id}
+                        title={`${p.os_numero} · ${p.cliente_nome} · R$ ${p.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                        onClick={e => { e.stopPropagation(); onParcelaClick?.(p, e) }}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 3,
+                          padding: '1px 5px', borderRadius: 3, fontSize: 9.5, fontWeight: 500,
+                          cursor: 'pointer', lineHeight: 1.4,
+                          overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
+                          background: p.status === 'atrasado' ? 'rgba(220,38,38,0.08)' : 'rgba(22,163,74,0.10)',
+                          borderLeft: `2.5px solid ${p.status === 'atrasado' ? '#dc2626' : '#16a34a'}`,
+                          color: p.status === 'atrasado' ? '#b91c1c' : '#15803d',
+                        }}
+                      >
+                        <span style={{ flexShrink: 0, fontSize: 8, opacity: 0.9 }}>R$</span>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {p.os_numero} · {p.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    ))}
                   </div>
 
                   {/* Expanded popover */}

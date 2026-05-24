@@ -70,7 +70,7 @@ export function useContasReceber() {
         `)
         .order('data_vencimento', { ascending: true })
       if (error) throw error
-      return (data ?? []).map(mapRow)
+      return (data ?? []).map(mapRow).filter(p => p.os_status !== 'cancelada')
     },
   })
 

@@ -86,13 +86,20 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   mono?: boolean
 }
 
-export function Input({ error, mono, style, onFocus, onBlur, ...props }: InputProps) {
+export function Input({ error, mono, style, onFocus, onBlur, onChange, type, ...props }: InputProps) {
+  const upper = type !== 'password' && type !== 'email' && type !== 'number'
   return (
     <input
+      type={type}
       style={{
         ...baseFieldStyle(error),
         fontFamily: mono ? "'JetBrains Mono', monospace" : 'inherit',
+        textTransform: upper ? 'uppercase' : undefined,
         ...style,
+      }}
+      onChange={e => {
+        if (upper) e.target.value = e.target.value.toUpperCase()
+        onChange?.(e)
       }}
       onFocus={e => {
         onFocusInput(e)
@@ -144,7 +151,7 @@ interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   error?: boolean
 }
 
-export function Textarea({ error, style, onFocus, onBlur, ...props }: TextareaProps) {
+export function Textarea({ error, style, onFocus, onBlur, onChange, ...props }: TextareaProps) {
   return (
     <textarea
       style={{
@@ -152,7 +159,12 @@ export function Textarea({ error, style, onFocus, onBlur, ...props }: TextareaPr
         resize: 'vertical',
         minHeight: 70,
         lineHeight: 1.5,
+        textTransform: 'uppercase',
         ...style,
+      }}
+      onChange={e => {
+        e.target.value = e.target.value.toUpperCase()
+        onChange?.(e)
       }}
       onFocus={e => {
         onFocusInput(e)

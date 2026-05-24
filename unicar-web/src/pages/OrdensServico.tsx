@@ -314,9 +314,10 @@ interface ClienteSearchProps {
   value: string
   onSelect: (c: ClienteResult) => void
   onEditRequest?: (c: ClienteResult) => void
+  onRegisterRequest?: (nome: string) => void
 }
 
-function ClienteSearch({ value, onSelect, onEditRequest }: ClienteSearchProps) {
+function ClienteSearch({ value, onSelect, onEditRequest, onRegisterRequest }: ClienteSearchProps) {
   const [search, setSearch] = useState(value)
   const [results,   setResults]   = useState<ClienteResult[]>([])
   const [loading,   setLoading]   = useState(false)
@@ -432,7 +433,8 @@ function ClienteSearch({ value, onSelect, onEditRequest }: ClienteSearchProps) {
           ))}
           {showEmpty && (
             <div
-              onMouseDown={e => { e.preventDefault(); setOpen(false) }}
+              onMouseDown={e => e.preventDefault()}
+              onClick={() => { setOpen(false); onRegisterRequest?.(search) }}
               style={{ padding: '10px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, color: '#E31E2D', fontSize: 12, fontWeight: 600 }}
               onMouseEnter={e => (e.currentTarget.style.background = '#FFF5F5')}
               onMouseLeave={e => (e.currentTarget.style.background = '#fff')}
@@ -770,6 +772,121 @@ function AuxiliaresSelect({ tecnicos, selected, excludeId, onChange }: Auxiliare
 }
 
 
+// ─── Cadastro rápido de cliente ───────────────────────────────────────────────
+
+interface CadastroRapidoModalProps {
+  open: boolean
+  nomeInicial: string
+  onClose: () => void
+  onSaved: (cliente: import('../types').Cliente) => void
+}
+
+function CadastroRapidoModal({ open, nomeInicial, onClose, onSaved }: CadastroRapidoModalProps) {
+  const [nome,     setNome]     = useState('')
+  const [telefone, setTelefone] = useState('')
+  const [placa,    setPlaca]    = useState('')
+  const [modelo,   setModelo]   = useState('')
+  const [saving,   setSaving]   = useState(false)
+  const [erro,     setErro]     = useState('')
+
+  useEffect(() => {
+    if (open) {
+      setNome(nomeInicial.toUpperCase())
+      setTelefone(''); setPlaca(''); setModelo(''); setErro('')
+    }
+  }, [open, nomeInicial])
+
+  async function handleSave() {
+    if (!nome.trim())     { setErro('Nome é obrigatório'); return }
+    if (!telefone.trim()) { setErro('Telefone é obrigatório'); return }
+    setSaving(true)
+    setErro('')
+    try {
+      const novo = await clientesService.create({
+        tipo: 'PF',
+        nome: nome.trim(),
+        documento: '',
+        telefone: telefone.replace(/\D/g, ''),
+        veiculos: placa.trim()
+          ? [{ id: '', placa: placa.replace(/[^A-Z0-9]/gi, '').toUpperCase(), modelo: modelo.trim().toUpperCase(), ano: '', km: '' }]
+          : [],
+      })
+      onSaved(novo)
+    } catch {
+      setErro('Erro ao cadastrar cliente. Tente novamente.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!open) return null
+
+  const inputSt: React.CSSProperties = {
+    width: '100%', border: '1px solid #CFCCC6', borderRadius: 5,
+    padding: '8px 10px', fontSize: 12.5, color: '#1A1A1A',
+    outline: 'none', fontFamily: 'inherit', background: '#fff',
+    textTransform: 'uppercase',
+  }
+
+  return createPortal(
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ background: '#fff', borderRadius: 8, width: 420, padding: 24, boxShadow: '0 24px 80px rgba(0,0,0,0.3)' }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: '#1A1A1A', marginBottom: 4 }}>Cadastro rápido</div>
+        <div style={{ fontSize: 11.5, color: '#8A8A8A', marginBottom: 20 }}>
+          Dados básicos. Complete o cadastro depois em Clientes.
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 600, color: '#4A4A4A', display: 'block', marginBottom: 4 }}>NOME <span style={{ color: '#E31E2D' }}>*</span></label>
+            <input value={nome} onChange={e => setNome(e.target.value.toUpperCase())} style={inputSt}
+              onFocus={e => { e.currentTarget.style.borderColor = '#E31E2D'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(227,30,45,0.08)' }}
+              onBlur={e => { e.currentTarget.style.borderColor = '#CFCCC6'; e.currentTarget.style.boxShadow = 'none' }}
+            />
+          </div>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 600, color: '#4A4A4A', display: 'block', marginBottom: 4 }}>TELEFONE <span style={{ color: '#E31E2D' }}>*</span></label>
+            <input value={formatPhone(telefone)} onChange={e => setTelefone(e.target.value.replace(/\D/g, '').slice(0, 11))}
+              placeholder="(00) 00000-0000"
+              style={{ ...inputSt, textTransform: 'none' }}
+              onFocus={e => { e.currentTarget.style.borderColor = '#E31E2D'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(227,30,45,0.08)' }}
+              onBlur={e => { e.currentTarget.style.borderColor = '#CFCCC6'; e.currentTarget.style.boxShadow = 'none' }}
+            />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 10 }}>
+            <div>
+              <label style={{ fontSize: 11, fontWeight: 600, color: '#4A4A4A', display: 'block', marginBottom: 4 }}>PLACA</label>
+              <input value={placa} onChange={e => setPlaca(e.target.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 7))}
+                placeholder="AAA0000"
+                style={{ ...inputSt, fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.05em' }}
+                onFocus={e => { e.currentTarget.style.borderColor = '#E31E2D'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(227,30,45,0.08)' }}
+                onBlur={e => { e.currentTarget.style.borderColor = '#CFCCC6'; e.currentTarget.style.boxShadow = 'none' }}
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: 11, fontWeight: 600, color: '#4A4A4A', display: 'block', marginBottom: 4 }}>MODELO</label>
+              <input value={modelo} onChange={e => setModelo(e.target.value.toUpperCase())} placeholder="Ex: CIVIC" style={inputSt}
+                onFocus={e => { e.currentTarget.style.borderColor = '#E31E2D'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(227,30,45,0.08)' }}
+                onBlur={e => { e.currentTarget.style.borderColor = '#CFCCC6'; e.currentTarget.style.boxShadow = 'none' }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {erro && <div style={{ marginTop: 10, fontSize: 11.5, color: '#E31E2D' }}>{erro}</div>}
+
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
+          <Button variant="secondary" onClick={onClose} disabled={saving}>Cancelar</Button>
+          <Button variant="primary" onClick={handleSave} disabled={saving}>
+            {saving ? 'Salvando…' : 'Cadastrar e selecionar'}
+          </Button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
 // ─── OS Modal ─────────────────────────────────────────────────────────────────
 
 interface OSModalProps {
@@ -802,6 +919,7 @@ function OSModal({
   const qc = useQueryClient()
   const [saveText, setSaveText] = useState('')
   const [editingCliente, setEditingCliente] = useState<ClienteResult | null>(null)
+  const [quickReg, setQuickReg] = useState<{ open: boolean; nome: string }>({ open: false, nome: '' })
   const veiculoWrapRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -1021,6 +1139,7 @@ function OSModal({
                         setTimeout(() => veiculoWrapRef.current?.querySelector('select')?.focus(), 100)
                       }}
                       onEditRequest={c => setEditingCliente(c)}
+                      onRegisterRequest={nome => setQuickReg({ open: true, nome })}
                     />
                   </Field>
 
@@ -1378,6 +1497,27 @@ function OSModal({
         />
       )}
 
+      <CadastroRapidoModal
+        open={quickReg.open}
+        nomeInicial={quickReg.nome}
+        onClose={() => setQuickReg({ open: false, nome: '' })}
+        onSaved={novo => {
+          setQuickReg({ open: false, nome: '' })
+          qc.invalidateQueries({ queryKey: ['clientes'] })
+          const endereco = [novo.rua, novo.bairro, novo.cidade, novo.estado].filter(Boolean).join(', ')
+          const primeiroVeiculo = novo.veiculos[0]
+          onFormChange({
+            clienteId:        novo.id,
+            clienteNome:      novo.nome,
+            clienteDocumento: novo.documento,
+            clienteEndereco:  endereco,
+            veiculoId:        primeiroVeiculo?.id || '',
+          })
+          qc.invalidateQueries({ queryKey: ['veiculos-cliente', novo.id] })
+          onToast?.('Cliente cadastrado!')
+        }}
+      />
+
     </>
   )
 }
@@ -1398,6 +1538,17 @@ export function OrdensServicoPage() {
   const [rowMenuPos, setRowMenuPos] = useState<{ top: number; right: number } | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<OrdemServicoRow | null>(null)
   const [liberarTarget, setLiberarTarget] = useState<OrdemServicoRow | null>(null)
+  const [cancelarTarget, setCancelarTarget] = useState<OrdemServicoRow | null>(null)
+  const [cancelarMotivo, setCancelarMotivo] = useState('')
+  const [cancelarMotivoErro, setCancelarMotivoErro] = useState(false)
+  const [reabrirTarget, setReabrirTarget] = useState<OrdemServicoRow | null>(null)
+  const [isReabrindo, setIsReabrindo] = useState(false)
+  const [activeTab, setActiveTab] = useState<'ativas' | 'canceladas' | 'liberados'>('ativas')
+  const hoje = new Date()
+  const [cancelAno, setCancelarAno] = useState(hoje.getFullYear())
+  const [cancelMes, setCancelarMes] = useState(hoje.getMonth() + 1)
+  const [liberadoAno, setLiberadoAno] = useState(hoje.getFullYear())
+  const [liberadoMes, setLiberadoMes] = useState(hoje.getMonth() + 1)
 
   const formRef = useRef(form)
   useEffect(() => { formRef.current = form })
@@ -1430,6 +1581,18 @@ export function OrdensServicoPage() {
     queryKey: ['os-historico', form.veiculoId, editingId],
     queryFn: () => ordensServicoService.historicoVeiculo(form.veiculoId, editingId ?? undefined),
     enabled: !!form.veiculoId && modalOpen,
+  })
+
+  const { data: canceladas = [], isLoading: loadingCanceladas } = useQuery({
+    queryKey: ['os-canceladas', cancelAno, cancelMes],
+    queryFn: () => ordensServicoService.listCanceladas(cancelAno, cancelMes),
+    enabled: activeTab === 'canceladas',
+  })
+
+  const { data: liberados = [], isLoading: loadingLiberados } = useQuery({
+    queryKey: ['os-liberados', liberadoAno, liberadoMes],
+    queryFn: () => ordensServicoService.listLiberados(liberadoAno, liberadoMes),
+    enabled: activeTab === 'liberados',
   })
 
   // ─── Toast ───────────────────────────────────────────────────────────────
@@ -1494,6 +1657,69 @@ export function OrdensServicoPage() {
     deleteMutation.mutate(deleteTarget.id)
   }
 
+  async function handleCancelarConfirm() {
+    if (!cancelarTarget) return
+    if (!cancelarMotivo.trim()) { setCancelarMotivoErro(true); return }
+    try {
+      await ordensServicoService.updateStatus(cancelarTarget.id, 'cancelada')
+      try { await ordensServicoService.inserirHistorico(cancelarTarget.id, cancelarTarget.status, 'cancelada', cancelarMotivo.trim()) } catch { /* silent */ }
+      try {
+        const { data: pagamentos } = await supabase.from('os_pagamentos').select('id').eq('os_id', cancelarTarget.id)
+        if (pagamentos?.length) {
+          await supabase.from('os_parcelas')
+            .update({ status: 'cancelada' })
+            .in('pagamento_id', pagamentos.map((p: { id: string }) => p.id))
+            .neq('status', 'pago')
+        }
+      } catch { /* silent */ }
+      qc.invalidateQueries({ queryKey: ['ordens-servico'] })
+      qc.invalidateQueries({ queryKey: ['os-canceladas'] })
+      qc.invalidateQueries({ queryKey: ['kanban'] })
+      qc.invalidateQueries({ queryKey: ['contas-receber'] })
+      qc.invalidateQueries({ queryKey: ['resumo-receber'] })
+      setCancelarTarget(null)
+      setCancelarMotivo('')
+      setCancelarMotivoErro(false)
+      showToast(`OS ${cancelarTarget.numero} cancelada`)
+    } catch (err) {
+      const msg = (err as { message?: string })?.message ?? 'Erro desconhecido'
+      showToast(`Erro ao cancelar OS: ${msg}`, 'error')
+    }
+  }
+
+  async function handleReabrir() {
+    if (!reabrirTarget) return
+    setIsReabrindo(true)
+    try {
+      await ordensServicoService.updateStatus(reabrirTarget.id, 'em_execucao')
+      try { await ordensServicoService.inserirHistorico(reabrirTarget.id, reabrirTarget.status, 'em_execucao', 'OS REABERTA') } catch { /* silent */ }
+      if (reabrirTarget.status === 'cancelada') {
+        try {
+          const { data: pagamentos } = await supabase.from('os_pagamentos').select('id').eq('os_id', reabrirTarget.id)
+          if (pagamentos?.length) {
+            await supabase.from('os_parcelas')
+              .update({ status: 'pendente' })
+              .in('pagamento_id', pagamentos.map((p: { id: string }) => p.id))
+              .eq('status', 'cancelada')
+          }
+        } catch { /* silent */ }
+      }
+      qc.invalidateQueries({ queryKey: ['ordens-servico'] })
+      qc.invalidateQueries({ queryKey: ['os-canceladas'] })
+      qc.invalidateQueries({ queryKey: ['os-liberados'] })
+      qc.invalidateQueries({ queryKey: ['kanban'] })
+      qc.invalidateQueries({ queryKey: ['contas-receber'] })
+      qc.invalidateQueries({ queryKey: ['resumo-receber'] })
+      setReabrirTarget(null)
+      showToast(`OS ${reabrirTarget.numero} reaberta — Em execução`)
+    } catch (err) {
+      const msg = (err as { message?: string })?.message ?? 'Erro desconhecido'
+      showToast(`Erro ao reabrir OS: ${msg}`, 'error')
+    } finally {
+      setIsReabrindo(false)
+    }
+  }
+
   const liberarMutation = useMutation({
     mutationFn: async (row: OrdemServicoRow) => {
       const { error } = await import('../lib/supabase').then(m =>
@@ -1510,6 +1736,7 @@ export function OrdensServicoPage() {
     onSuccess: (_data, row) => {
       qc.invalidateQueries({ queryKey: ['ordens-servico'] })
       qc.invalidateQueries({ queryKey: ['kanban'] })
+      qc.invalidateQueries({ queryKey: ['os-liberados'] })
       setLiberarTarget(null)
       showToast(`Veículo liberado — OS #${row.numero}`)
     },
@@ -1539,6 +1766,7 @@ export function OrdensServicoPage() {
   // ─── Filter ───────────────────────────────────────────────────────────────
 
   const filtered = rows.filter(r => {
+    if (r.status === 'cancelada' || r.status === 'veiculo_liberado' || r.status === 'entregue') return false
     if (!search) return true
     const q = search.toLowerCase()
     return (
@@ -1597,7 +1825,7 @@ export function OrdensServicoPage() {
 
   // ─── Gerar orçamento PDF ──────────────────────────────────────────────────
 
-  function handleGerarOrcamento() {
+  async function handleGerarOrcamento() {
     const doc = new jsPDF({ unit: 'mm', format: 'a4' })
     const M = 20
     const PW = 210
@@ -1789,12 +2017,22 @@ export function OrdensServicoPage() {
     const url = URL.createObjectURL(blob)
     window.open(url, '_blank', 'noopener')
     setTimeout(() => URL.revokeObjectURL(url), 15000)
+
+    // Muda status para aguardando_aprovacao
+    const payload = { ...formToPayload(form, editingId ?? undefined), status: 'aguardando_aprovacao' as const }
+    try {
+      const prevStatus = editingId ? form.status : null
+      const saved = await upsertMutation.mutateAsync(payload)
+      try { await ordensServicoService.inserirHistorico(saved.id, prevStatus, 'aguardando_aprovacao') } catch { /* silent */ }
+      qc.invalidateQueries({ queryKey: ['kanban'] })
+      showToast(`Orçamento gerado — OS ${saved.numero || ''} aguardando aprovação`)
+    } catch { /* silent — PDF já foi aberto */ }
   }
 
   // ─── Iniciar OS ───────────────────────────────────────────────────────────
 
   async function handleIniciarOS() {
-    const payload = formToPayload(form, editingId ?? undefined)
+    const payload = { ...formToPayload(form, editingId ?? undefined), status: 'aberta' as const }
     try {
       const prevStatus = editingId ? form.status : null
       const saved = await upsertMutation.mutateAsync(payload)
@@ -1835,6 +2073,29 @@ export function OrdensServicoPage() {
       />
 
       <div style={{ flex: 1, overflow: 'auto', padding: 20 }}>
+        {/* Tabs */}
+        <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: '1px solid #E3E0D9', paddingBottom: 0 }}>
+          {([
+            { key: 'ativas',    label: 'Ativas' },
+            { key: 'liberados', label: 'Finalizadas' },
+            { key: 'canceladas',label: 'Canceladas' },
+          ] as const).map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setActiveTab(key)}
+              style={{
+                padding: '7px 16px', fontSize: 12.5, fontWeight: 600, border: 'none',
+                background: 'none', cursor: 'pointer', borderRadius: '5px 5px 0 0',
+                color: activeTab === key ? '#E31E2D' : '#8A8A8A',
+                borderBottom: activeTab === key ? '2px solid #E31E2D' : '2px solid transparent',
+                marginBottom: -1,
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
         {/* Summary bar */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <div style={{ fontSize: 12, color: '#8A8A8A' }}>
@@ -1859,8 +2120,8 @@ export function OrdensServicoPage() {
           </div>
         </div>
 
-        {/* Table */}
-        <div style={{ background: '#fff', border: '1px solid #E3E0D9', borderRadius: 6, overflow: 'hidden', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
+        {/* Table — só visível na aba Ativas */}
+        <div style={{ display: activeTab === 'ativas' ? undefined : 'none', background: '#fff', border: '1px solid #E3E0D9', borderRadius: 6, overflow: 'hidden', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
               <tr>
@@ -2027,6 +2288,21 @@ export function OrdensServicoPage() {
                               Liberar Veículo
                             </button>
                           )}
+                          {r.status !== 'cancelada' && r.status !== 'entregue' && (
+                            <button
+                              data-row-actions
+                              onClick={() => { setRowMenu(null); setCancelarTarget(r); setCancelarMotivo(''); setCancelarMotivoErro(false) }}
+                              style={{
+                                display: 'block', width: '100%', textAlign: 'left',
+                                padding: '8px 14px', fontSize: 12.5, background: 'none',
+                                border: 'none', cursor: 'pointer', color: '#B45309',
+                              }}
+                              onMouseEnter={e => (e.currentTarget.style.background = '#FFFBEB')}
+                              onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                            >
+                              Cancelar OS
+                            </button>
+                          )}
                           <button
                             data-row-actions
                             onClick={() => handleDeleteClick(r)}
@@ -2050,6 +2326,118 @@ export function OrdensServicoPage() {
             </tbody>
           </table>
         </div>
+
+        {/* ── Aba Finalizadas ─────────────────────────────────────── */}
+        {activeTab === 'liberados' && (
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+              <button
+                onClick={() => { const d = new Date(liberadoAno, liberadoMes - 2); setLiberadoAno(d.getFullYear()); setLiberadoMes(d.getMonth() + 1) }}
+                style={{ background: 'none', border: '1px solid #CFCCC6', borderRadius: 5, padding: '4px 10px', cursor: 'pointer', fontSize: 14, color: '#4A4A4A' }}
+              >‹</button>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#1A1A1A', minWidth: 130, textAlign: 'center' }}>
+                {new Date(liberadoAno, liberadoMes - 1).toLocaleString('pt-BR', { month: 'long', year: 'numeric' }).toUpperCase()}
+              </span>
+              <button
+                onClick={() => { const d = new Date(liberadoAno, liberadoMes); setLiberadoAno(d.getFullYear()); setLiberadoMes(d.getMonth() + 1) }}
+                style={{ background: 'none', border: '1px solid #CFCCC6', borderRadius: 5, padding: '4px 10px', cursor: 'pointer', fontSize: 14, color: '#4A4A4A' }}
+              >›</button>
+              <span style={{ fontSize: 11.5, color: '#8A8A8A', marginLeft: 4 }}>
+                {loadingLiberados ? 'Carregando…' : `${liberados.length} veículo${liberados.length !== 1 ? 's' : ''} liberado${liberados.length !== 1 ? 's' : ''}`}
+              </span>
+            </div>
+
+            <div style={{ background: '#fff', border: '1px solid #E3E0D9', borderRadius: 6, overflow: 'hidden', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <thead>
+                  <tr>
+                    {['Nº OS', 'Cliente / Veículo', 'KM', 'Data', 'Status', 'Técnico', 'Valor'].map((col, i) => (
+                      <th key={i} style={{ textAlign: 'left', padding: '10px 14px', fontSize: 10.5, fontWeight: 600, letterSpacing: '0.06em', color: '#8A8A8A', textTransform: 'uppercase', borderBottom: '1px solid #E3E0D9', background: '#F4F2ED', whiteSpace: 'nowrap' }}>{col}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {liberados.length === 0 && !loadingLiberados && (
+                    <tr><td colSpan={7} style={{ padding: '40px 14px', textAlign: 'center', color: '#CFCCC6', fontSize: 13 }}>Nenhum veículo liberado neste mês</td></tr>
+                  )}
+                  {liberados.map(r => (
+                    <tr key={r.id} onClick={() => setReabrirTarget(r)} style={{ cursor: 'pointer' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = '#FAFAF9')}
+                      onMouseLeave={e => (e.currentTarget.style.background = '#fff')}
+                    >
+                      <td style={{ padding: '11px 14px', borderBottom: '1px solid #EBE8E2', fontWeight: 700, fontFamily: "'JetBrains Mono', monospace", fontSize: 11.5, color: '#065f46' }}>{r.numero}</td>
+                      <td style={{ padding: '11px 14px', borderBottom: '1px solid #EBE8E2' }}>
+                        <div style={{ fontWeight: 600 }}>{r.clienteNome}</div>
+                        <div style={{ fontSize: 10.5, color: '#8A8A8A', fontFamily: "'JetBrains Mono', monospace" }}>{r.veiculoPlaca && `${displayPlate(r.veiculoPlaca)} · ${r.veiculoModelo}`}</div>
+                      </td>
+                      <td style={{ padding: '11px 14px', borderBottom: '1px solid #EBE8E2', color: '#4A4A4A', fontFamily: "'JetBrains Mono', monospace", fontSize: 11.5 }}>{r.kmAtual ? `${Number(r.kmAtual).toLocaleString('pt-BR')} km` : '—'}</td>
+                      <td style={{ padding: '11px 14px', borderBottom: '1px solid #EBE8E2', color: '#4A4A4A', whiteSpace: 'nowrap' }}>{r.data ? new Date(r.data + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}</td>
+                      <td style={{ padding: '11px 14px', borderBottom: '1px solid #EBE8E2' }}>
+                        <span style={{ ...STATUS_COLOR[r.status], padding: '2px 8px', borderRadius: 999, fontSize: 10.5, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                          {STATUS_LABEL[r.status]}
+                        </span>
+                      </td>
+                      <td style={{ padding: '11px 14px', borderBottom: '1px solid #EBE8E2' }}>{r.tecnicoNome ? <Avatar name={r.tecnicoNome} size={26} /> : <span style={{ color: '#CFCCC6' }}>—</span>}</td>
+                      <td style={{ padding: '11px 14px', borderBottom: '1px solid #EBE8E2', fontWeight: 600, whiteSpace: 'nowrap' }}>R$ {r.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* ── Aba Canceladas ─────────────────────────────────────── */}
+        {activeTab === 'canceladas' && (
+          <div>
+            {/* Seletor mês/ano */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+              <button onClick={() => { const d = new Date(cancelAno, cancelMes - 2); setCancelarAno(d.getFullYear()); setCancelarMes(d.getMonth() + 1) }}
+                style={{ background: 'none', border: '1px solid #CFCCC6', borderRadius: 5, padding: '4px 10px', cursor: 'pointer', fontSize: 14, color: '#4A4A4A' }}>‹</button>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#1A1A1A', minWidth: 130, textAlign: 'center' }}>
+                {new Date(cancelAno, cancelMes - 1).toLocaleString('pt-BR', { month: 'long', year: 'numeric' }).toUpperCase()}
+              </span>
+              <button onClick={() => { const d = new Date(cancelAno, cancelMes); setCancelarAno(d.getFullYear()); setCancelarMes(d.getMonth() + 1) }}
+                style={{ background: 'none', border: '1px solid #CFCCC6', borderRadius: 5, padding: '4px 10px', cursor: 'pointer', fontSize: 14, color: '#4A4A4A' }}>›</button>
+              <span style={{ fontSize: 11.5, color: '#8A8A8A', marginLeft: 4 }}>
+                {loadingCanceladas ? 'Carregando…' : `${canceladas.length} OS cancelada${canceladas.length !== 1 ? 's' : ''}`}
+              </span>
+            </div>
+
+            <div style={{ background: '#fff', border: '1px solid #E3E0D9', borderRadius: 6, overflow: 'hidden', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <thead>
+                  <tr>
+                    {['Nº OS', 'Cliente / Veículo', 'KM', 'Data', 'Técnico', 'Valor'].map((col, i) => (
+                      <th key={i} style={{ textAlign: 'left', padding: '10px 14px', fontSize: 10.5, fontWeight: 600, letterSpacing: '0.06em', color: '#8A8A8A', textTransform: 'uppercase', borderBottom: '1px solid #E3E0D9', background: '#F4F2ED', whiteSpace: 'nowrap' }}>{col}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {canceladas.length === 0 && !loadingCanceladas && (
+                    <tr><td colSpan={6} style={{ padding: '40px 14px', textAlign: 'center', color: '#CFCCC6', fontSize: 13 }}>Nenhuma OS cancelada neste mês</td></tr>
+                  )}
+                  {canceladas.map(r => (
+                    <tr key={r.id} onClick={() => setReabrirTarget(r)} style={{ cursor: 'pointer' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = '#FAFAF9')}
+                      onMouseLeave={e => (e.currentTarget.style.background = '#fff')}
+                    >
+                      <td style={{ padding: '11px 14px', borderBottom: '1px solid #EBE8E2', fontWeight: 700, fontFamily: "'JetBrains Mono', monospace", fontSize: 11.5, color: '#8A8A8A' }}>{r.numero}</td>
+                      <td style={{ padding: '11px 14px', borderBottom: '1px solid #EBE8E2' }}>
+                        <div style={{ fontWeight: 600 }}>{r.clienteNome}</div>
+                        <div style={{ fontSize: 10.5, color: '#8A8A8A', fontFamily: "'JetBrains Mono', monospace" }}>{r.veiculoPlaca && `${displayPlate(r.veiculoPlaca)} · ${r.veiculoModelo}`}</div>
+                      </td>
+                      <td style={{ padding: '11px 14px', borderBottom: '1px solid #EBE8E2', color: '#4A4A4A', fontFamily: "'JetBrains Mono', monospace", fontSize: 11.5 }}>{r.kmAtual ? `${Number(r.kmAtual).toLocaleString('pt-BR')} km` : '—'}</td>
+                      <td style={{ padding: '11px 14px', borderBottom: '1px solid #EBE8E2', color: '#4A4A4A', whiteSpace: 'nowrap' }}>{r.data ? new Date(r.data + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}</td>
+                      <td style={{ padding: '11px 14px', borderBottom: '1px solid #EBE8E2' }}>{r.tecnicoNome ? <Avatar name={r.tecnicoNome} size={26} /> : <span style={{ color: '#CFCCC6' }}>—</span>}</td>
+                      <td style={{ padding: '11px 14px', borderBottom: '1px solid #EBE8E2', fontWeight: 600, whiteSpace: 'nowrap' }}>R$ {r.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
 
       <OSModal
@@ -2114,6 +2502,107 @@ export function OrdensServicoPage() {
                 }}
               >
                 {liberarMutation.isPending ? 'Liberando...' : 'Confirmar liberação'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cancelar OS confirmation modal */}
+      {cancelarTarget && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+          onClick={e => { if (e.target === e.currentTarget) { setCancelarTarget(null); setCancelarMotivo(''); setCancelarMotivoErro(false) } }}
+        >
+          <div style={{ background: '#fff', borderRadius: 8, width: 440, maxWidth: '100%', boxShadow: '0 16px 48px rgba(0,0,0,0.22)', padding: '24px 24px 20px' }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#1A1A1A', marginBottom: 4 }}>Cancelar OS</div>
+            <div style={{ fontSize: 12.5, color: '#4A4A4A', marginBottom: 18 }}>
+              OS <strong>{cancelarTarget.numero}</strong> — <strong>{cancelarTarget.clienteNome}</strong>
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: '#4A4A4A', display: 'block', marginBottom: 5 }}>
+                MOTIVO DO CANCELAMENTO <span style={{ color: '#E31E2D' }}>*</span>
+              </label>
+              <textarea
+                value={cancelarMotivo}
+                onChange={e => { setCancelarMotivo(e.target.value.toUpperCase()); setCancelarMotivoErro(false) }}
+                placeholder="DESCREVA O MOTIVO DO CANCELAMENTO…"
+                rows={3}
+                style={{
+                  width: '100%', border: `1px solid ${cancelarMotivoErro ? '#E31E2D' : '#CFCCC6'}`,
+                  borderRadius: 5, padding: '8px 10px', fontSize: 12.5, color: '#1A1A1A',
+                  outline: 'none', fontFamily: 'inherit', resize: 'none', boxSizing: 'border-box',
+                  textTransform: 'uppercase',
+                  boxShadow: cancelarMotivoErro ? '0 0 0 3px rgba(227,30,45,0.08)' : 'none',
+                }}
+                onFocus={e => { e.currentTarget.style.borderColor = cancelarMotivoErro ? '#E31E2D' : '#E31E2D'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(227,30,45,0.08)' }}
+                onBlur={e => { e.currentTarget.style.borderColor = cancelarMotivoErro ? '#E31E2D' : '#CFCCC6'; e.currentTarget.style.boxShadow = cancelarMotivoErro ? '0 0 0 3px rgba(227,30,45,0.08)' : 'none' }}
+                autoFocus
+              />
+              {cancelarMotivoErro && (
+                <span style={{ fontSize: 11, color: '#E31E2D', marginTop: 3, display: 'block' }}>Motivo é obrigatório</span>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <Button variant="secondary" size="sm" onClick={() => { setCancelarTarget(null); setCancelarMotivo(''); setCancelarMotivoErro(false) }}>Voltar</Button>
+              <button
+                onClick={handleCancelarConfirm}
+                style={{ padding: '6px 16px', borderRadius: 5, border: 'none', cursor: 'pointer', background: '#B45309', color: '#fff', fontSize: 12.5, fontWeight: 600, fontFamily: 'inherit' }}
+              >
+                Confirmar cancelamento
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reabrir / Ver OS modal (Finalizadas + Canceladas) */}
+      {reabrirTarget && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+          onClick={e => { if (e.target === e.currentTarget) setReabrirTarget(null) }}
+        >
+          <div style={{ background: '#fff', borderRadius: 8, width: 400, maxWidth: '100%', boxShadow: '0 16px 48px rgba(0,0,0,0.22)', padding: '24px 24px 20px' }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#1A1A1A', marginBottom: 4 }}>
+              OS {reabrirTarget.numero}
+            </div>
+            <div style={{ fontSize: 12.5, color: '#4A4A4A', marginBottom: 6 }}>
+              <strong>{reabrirTarget.clienteNome}</strong>
+            </div>
+            {reabrirTarget.veiculoPlaca && (
+              <div style={{ fontSize: 11.5, fontFamily: "'JetBrains Mono', monospace", color: '#8A8A8A', marginBottom: 6 }}>
+                {displayPlate(reabrirTarget.veiculoPlaca)}{reabrirTarget.veiculoModelo ? ` · ${reabrirTarget.veiculoModelo}` : ''}
+              </div>
+            )}
+            <div style={{ marginBottom: 22 }}>
+              <span style={{
+                ...STATUS_COLOR[reabrirTarget.status],
+                padding: '2px 8px', borderRadius: 999, fontSize: 10.5, fontWeight: 600,
+              }}>
+                {STATUS_LABEL[reabrirTarget.status]}
+              </span>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => { setReabrirTarget(null); openEdit(reabrirTarget) }}
+                style={{ flex: 1 }}
+              >
+                Ver OS
+              </Button>
+              <button
+                onClick={handleReabrir}
+                disabled={isReabrindo}
+                style={{
+                  flex: 1, padding: '6px 16px', borderRadius: 5, border: 'none', cursor: 'pointer',
+                  background: '#1D4ED8', color: '#fff', fontSize: 12.5, fontWeight: 600,
+                  fontFamily: 'inherit', opacity: isReabrindo ? 0.6 : 1,
+                }}
+              >
+                {isReabrindo ? 'Reabrindo…' : 'Reabrir OS'}
               </button>
             </div>
           </div>

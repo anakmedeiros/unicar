@@ -234,7 +234,7 @@ function VehicleRow({ veiculo, onRemove, onChange }: VehicleRowProps) {
       />
       <input
         value={veiculo.modelo}
-        onChange={e => onChange({ ...veiculo, modelo: e.target.value })}
+        onChange={e => onChange({ ...veiculo, modelo: e.target.value.toUpperCase() })}
         placeholder="Modelo"
         style={{
           border: '1px solid #CFCCC6',
@@ -791,7 +791,7 @@ function ClienteDrawer({
                   />
                   <input
                     value={newVehicle.modelo}
-                    onChange={e => onNewVehicleChange({ modelo: e.target.value })}
+                    onChange={e => onNewVehicleChange({ modelo: e.target.value.toUpperCase() })}
                     placeholder="Modelo"
                     style={{
                       border: '1px dashed #CFCCC6',
@@ -1084,7 +1084,7 @@ export function ClientesPage() {
 
   // ─── Drawer helpers ───────────────────────────────────────────────────────────
 
-  function _openNew() {
+  function openNew() {
     setForm(EMPTY_FORM)
     setErrors({})
     setNewVehicle({ placa: '', modelo: '', ano: '', km: '' })
@@ -1237,6 +1237,7 @@ export function ClientesPage() {
               </button>
             )}
           </div>
+          <Button variant="primary" onClick={openNew}>+ Novo cliente</Button>
         </div>
 
         {/* Table */}
@@ -1303,7 +1304,8 @@ export function ClientesPage() {
               {filtered.map(c => (
                 <tr
                   key={c.id}
-                  style={{ cursor: 'default' }}
+                  onClick={() => openEdit(c)}
+                  style={{ cursor: 'pointer' }}
                 >
                   {/* Cliente */}
                   <td style={{ padding: '11px 14px', borderBottom: '1px solid #EBE8E2' }}>

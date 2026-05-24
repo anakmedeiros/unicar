@@ -1,4 +1,4 @@
-export type TipoEvento = 'agendamento' | 'lembrete'
+export type TipoEvento = 'agendamento' | 'lembrete' | 'pagamento'
 
 export interface Agendamento {
   id: string
@@ -15,6 +15,7 @@ export interface Agendamento {
   tecnico_id: string | null
   tecnico_nome?: string
   cor: string
+  valor?: number | null
   criado_em: string
 }
 
@@ -30,6 +31,16 @@ export interface AgendamentoForm {
   os_id: string
   tecnico_id: string
   cor: string
+  valor?: string
+}
+
+export interface ParcelaCalendario {
+  id: string
+  data_vencimento: string
+  valor: number
+  os_numero: string
+  cliente_nome: string
+  status: 'pendente' | 'atrasado'
 }
 
 export const CORES = [
@@ -52,6 +63,7 @@ export const EMPTY_FORM: AgendamentoForm = {
   os_id: '',
   tecnico_id: '',
   cor: '#dc2626',
+  valor: '',
 }
 
 // ─── Feriados nacionais 2025-2026 ─────────────────────────────────────────────
