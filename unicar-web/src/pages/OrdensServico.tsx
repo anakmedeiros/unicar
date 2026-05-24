@@ -23,7 +23,6 @@ import type {
   OrdemServicoRow,
   Tecnico,
   CatalogoItem,
-  Cliente,
 } from '../types'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -895,7 +894,6 @@ interface OSModalProps {
   form: OSFormData
   lastSaved: Date | null
   isSaving: boolean
-  clientes: Cliente[]
   tecnicos: Tecnico[]
   catalogoServicos: CatalogoItem[]
   catalogoPecas: CatalogoItem[]
@@ -912,7 +910,7 @@ interface OSModalProps {
 
 function OSModal({
   open, mode, form, lastSaved, isSaving,
-  clientes, tecnicos, catalogoServicos, catalogoPecas, historico,
+  tecnicos, catalogoServicos, catalogoPecas, historico,
   onFormChange, onClose, onSaveDraft, onGerarOrcamento, onIniciarOS,
   readOnly = false, statusHistory: _statusHistory = [], onToast,
 }: OSModalProps) {
@@ -2446,7 +2444,6 @@ export function OrdensServicoPage() {
         form={form}
         lastSaved={lastSaved}
         isSaving={upsertMutation.isPending}
-        clientes={clientes}
         tecnicos={tecnicos}
         catalogoServicos={catalogoServicos}
         catalogoPecas={catalogoPecas}
